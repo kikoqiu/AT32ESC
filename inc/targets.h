@@ -1,3 +1,10 @@
+#ifdef AT32F421K8U7
+#include "at32f421.h"
+#endif
+#ifdef AT32F415K8U7
+#include "at32f415.h"
+#endif
+
 
 
 #ifndef USE_MAKE
@@ -23,7 +30,7 @@
 #ifdef AT32DEV_F421
 #define FIRMWARE_NAME           "AT32PB4     "
 #define FILE_NAME                "AT32DEV_F421"
-#define DEAD_TIME               60
+#define DEAD_TIME               80
 #define HARDWARE_GROUP_AT_A
 #define USE_SERIAL_TELEMETRY
 #endif
@@ -375,3 +382,8 @@
 
 
 
+#ifdef MCU_AT415
+    #define COMP_VALUE (CMP->ctrlsts1_bit.cmp1value)
+#else
+	#define COMP_VALUE (CMP->ctrlsts_bit.cmpvalue)
+#endif

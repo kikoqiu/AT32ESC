@@ -268,16 +268,10 @@ uint8_t changeover_step = 5;
 uint8_t filter_level = 5;
 uint8_t running = 0;
 uint16_t advance = 0;
-uint8_t advancedivisor = 4;
+const uint8_t advancedivisor = 4;
 char rising = 1;
 
 
-// int sin_divider = 2;
-int16_t phase_A_position;
-int16_t phase_B_position;
-int16_t phase_C_position;
-uint16_t step_delay = 100;
-//char stepper_sine = 0;
 char forward = 1;
 uint16_t gate_drive_offset = DEAD_TIME;
 
@@ -313,7 +307,7 @@ uint16_t thiszctime;
 uint16_t duty_cycle = 0;
 char step = 1;
 uint16_t commutation_interval = 12500;
-uint16_t waitTime = 0;
+
 uint16_t signaltimeout = 0;
 uint8_t ubAnalogWatchdogStatus = RESET;
 
@@ -499,20 +493,18 @@ void PeriodElapsedCallback()
 	{
 		zero_crosses++;
 	}
-
-	bemfcounter = 0;
-	bad_count = 0;
 	
 	if (!old_routine)
 	{
 		enableCompInterrupts(); // enable comp interrupt
 	}else{
+		bad_count = 0;
 		if (stall_protection || RC_CAR_REVERSE)
 		{
 			if (zero_crosses >= 20 && commutation_interval <= 2000)
 			{
 				old_routine = 0;
-				enableCompInterrupts(); // enable interrupt
+				enableCompInterrupts(); 
 			}
 		}
 		else
@@ -520,10 +512,17 @@ void PeriodElapsedCallback()
 			if (zero_crosses > 30)
 			{
 				old_routine = 0;
-				enableCompInterrupts(); // enable interrupt
+				enableCompInterrupts();
 			}
 		}
 	}
+}
+
+void queueComm(uint16_t wtime){
+	COM_TIMER->cval = 0;
+	COM_TIMER->pr = wtime;
+	COM_TIMER->ists = 0x00;
+	COM_TIMER->iden |= TMR_OVF_INT;
 }
 void zcfoundroutine_nonblock()
 {
@@ -531,11 +530,8 @@ void zcfoundroutine_nonblock()
 	INTERVAL_TIMER->cval = 0;
 	commutation_interval = (thiszctime + (3 * commutation_interval)) / 4;
 	advance = commutation_interval / advancedivisor;
-	waitTime = commutation_interval / 2 - advance;
-	COM_TIMER->cval = 0;
-	COM_TIMER->pr = waitTime;
-	COM_TIMER->ists = 0x00;
-	COM_TIMER->iden |= TMR_OVF_INT;
+	uint16_t waitTime  = commutation_interval / 2 - advance;
+	queueComm(waitTime);
 }
 
 void interruptRoutine()
@@ -563,13 +559,8 @@ void interruptRoutine()
 	{
 		for (int i = 0; i < filter_level; i++)
 		{
-#ifdef MCU_AT415
-			if ((CMP->ctrlsts1_bit.cmp1value))
+			if (COMP_VALUE)
 			{
-#else
-			if ((CMP->ctrlsts_bit.cmpvalue))
-			{
-#endif
 				return;
 			}
 		}
@@ -578,13 +569,8 @@ void interruptRoutine()
 	{
 		for (int i = 0; i < filter_level; i++)
 		{
-#ifdef MCU_AT415
-			if (!(CMP->ctrlsts1_bit.cmp1value))
+			if (!COMP_VALUE)
 			{
-#else
-			if (!(CMP->ctrlsts_bit.cmpvalue))
-			{
-#endif
 				return;
 			}
 		}
@@ -595,15 +581,8 @@ void interruptRoutine()
 
 	commutation_interval = ((3 * commutation_interval) + thiszctime) >> 2;
 	advance = (commutation_interval >> 3) * advance_level; // 60 divde 8 7.5 degree increments
-	waitTime = (commutation_interval >> 1) - advance;
-
-	waitTime = waitTime >> fast_accel;
-	COM_TIMER->cval = 0;
-	COM_TIMER->pr = waitTime;
-	COM_TIMER->ists = 0x00;
-	COM_TIMER->iden |= TMR_OVF_INT;
-
-
+	uint16_t waitTime = (commutation_interval >> 1) - advance;
+	queueComm(waitTime >> fast_accel);
 }
 
 void startMotor()
@@ -1151,7 +1130,6 @@ int main(void)
 	newinput = 48;
 #ifdef FIXED_SPEED_MODE
 	use_speed_control_loop = 1;
-	use_sin_start = 0;
 	target_e_com_time = 60000000 / FIXED_SPEED_MODE_RPM / (motor_poles / 2);
 	input = 48;
 #endif
@@ -1412,10 +1390,6 @@ int main(void)
 		{
 			bemf_timeout_happened = 0;
 		}
-		/*if (use_sin_start && adjusted_input < 160)
-		{
-			bemf_timeout_happened = 0;
-		}*/
 
 		if (crawler_mode)
 		{
@@ -1452,55 +1426,25 @@ int main(void)
 #ifdef FIXED_DUTY_MODE
 			input = FIXED_DUTY_MODE_POWER * 20;
 #else
-			/*if (use_sin_start)
-			{
-				if (adjusted_input < 30)
-				{ // dead band ?
-					input = 0;
-				}
 
-				if (adjusted_input > 30 && adjusted_input < (sine_mode_changeover_thottle_level * 20))
-				{
-					input = map(adjusted_input, 30, (sine_mode_changeover_thottle_level * 20), 47, 160);
-				}
-				if (adjusted_input >= (sine_mode_changeover_thottle_level * 20))
-				{
-					input = map(adjusted_input, (sine_mode_changeover_thottle_level * 20), 2000, 160, 2000);
-				}
-			}
-			else*/
+			
+			if (use_speed_control_loop)
 			{
-				if (use_speed_control_loop)
+				if (drive_by_rpm)
 				{
-					if (drive_by_rpm)
-					{
-						target_e_com_time = 60000000 / map(adjusted_input, 47, 2047, MINIMUM_RPM_SPEED_CONTROL, MAXIMUM_RPM_SPEED_CONTROL) / (motor_poles / 2);
-						if (adjusted_input < 47)
-						{ // dead band ?
-							input = 0;
-							speedPid.error = 0;
-							input_override = 0;
-						}
-						else
-						{
-							input = (uint16_t)input_override; // speed control pid override
-							if (input_override > 2047)
-							{
-								input = 2047;
-							}
-							if (input_override < 48)
-							{
-								input = 48;
-							}
-						}
+					target_e_com_time = 60000000 / map(adjusted_input, 47, 2047, MINIMUM_RPM_SPEED_CONTROL, MAXIMUM_RPM_SPEED_CONTROL) / (motor_poles / 2);
+					if (adjusted_input < 47)
+					{ // dead band ?
+						input = 0;
+						speedPid.error = 0;
+						input_override = 0;
 					}
 					else
 					{
-
 						input = (uint16_t)input_override; // speed control pid override
-						if (input_override > 1999)
+						if (input_override > 2047)
 						{
-							input = 1999;
+							input = 2047;
 						}
 						if (input_override < 48)
 						{
@@ -1511,9 +1455,23 @@ int main(void)
 				else
 				{
 
-					input = adjusted_input;
+					input = (uint16_t)input_override; // speed control pid override
+					if (input_override > 1999)
+					{
+						input = 1999;
+					}
+					if (input_override < 48)
+					{
+						input = 48;
+					}
 				}
 			}
+			else
+			{
+
+				input = adjusted_input;
+			}
+			
 #endif
 		}
 		
