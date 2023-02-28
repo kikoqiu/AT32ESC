@@ -46,31 +46,11 @@ uint16_t comp_change_time = 0;
 //=============================	Defaults =============================
 //===========================================================================
 
-uint8_t drive_by_rpm = 0;
+//uint8_t drive_by_rpm = 0;
 uint32_t MAXIMUM_RPM_SPEED_CONTROL = 12000;
 uint32_t MINIMUM_RPM_SPEED_CONTROL = 2000;
 
-// assign speed control PID values values are x10000
-fastPID speedPid = { // commutation speed loop time
-	.Kp = 10,
-	.Ki = 0,
-	.Kd = 100,
-	.integral_limit = 10000,
-	.output_limit = 50000};
 
-fastPID currentPid = { // 1khz loop time
-	.Kp = 800,
-	.Ki = 0,
-	.Kd = 1000,
-	.integral_limit = 20000,
-	.output_limit = 100000};
-
-fastPID stallPid = { // 1khz loop time
-	.Kp = 2,
-	.Ki = 0,
-	.Kd = 50,
-	.integral_limit = 10000,
-	.output_limit = 50000};
 
 uint16_t target_e_com_time_high;
 uint16_t target_e_com_time_low;
@@ -82,7 +62,7 @@ char VARIABLE_PWM = 1;
 char bi_direction = 0;
 char stuck_rotor_protection = 1; // Turn off for Crawlers
 char brake_on_stop = 0;
-char stall_protection = 0;
+//char stall_protection = 0;
 //char use_sin_start = 0;
 char TLM_ON_INTERVAL = 0;
 uint8_t telemetry_interval_ms = 30;
@@ -131,39 +111,15 @@ uint16_t ADC_CCR = 30;
 uint16_t current_angle = 90;
 uint16_t desired_angle = 90;
 
-// assign current control PID values
 
-// PID speedPid = {
-//		.Kp = 0.001,
-//		.Ki = 0,
-//		.Kd = 0.010,
-//		.integral_limit = 1,
-//		.output_limit = 5
-// };
-//
-// PID currentPid = {
-//		.Kp = 0.04,
-//		.Ki = 0,
-//		.Kd = 0.05,
-//		.integral_limit = 2,
-//		.output_limit = 10
-// };
-//
-// PID stallPid = {
-//		.Kp = 0.0002,
-//		.Ki = 0.00000001,
-//		.Kd = 0.05,
-//		.integral_limit = 1,
-//		.output_limit = 5
-// };
 char boot_up_tune_played = 0;
 uint16_t target_e_com_time = 0;
-int16_t Speed_pid_output;
-char use_speed_control_loop = 0;
+//int16_t Speed_pid_output;
+//char use_speed_control_loop = 0;
 float input_override = 0;
 int16_t use_current_limit_adjust = 2000;
 char use_current_limit = 0;
-float stall_protection_adjust = 0;
+//float stall_protection_adjust = 0;
 
 uint32_t MCU_Id = 0;
 uint32_t REV_Id = 0;
@@ -339,35 +295,6 @@ void checkForHighSignal()
 	}
 }
 
-float doPidCalculations(struct fastPID *pidnow, int actual, int target)
-{
-
-	pidnow->error = actual - target;
-	pidnow->integral = pidnow->integral + pidnow->error * pidnow->Ki + pidnow->last_error * pidnow->Ki;
-	if (pidnow->integral > pidnow->integral_limit)
-	{
-		pidnow->integral = pidnow->integral_limit;
-	}
-	if (pidnow->integral < -pidnow->integral_limit)
-	{
-		pidnow->integral = -pidnow->integral_limit;
-	}
-
-	pidnow->derivative = pidnow->Kd * (pidnow->error - pidnow->last_error);
-	pidnow->last_error = pidnow->error;
-
-	pidnow->pid_output = pidnow->error * pidnow->Kp + pidnow->integral + pidnow->derivative;
-
-	if (pidnow->pid_output > pidnow->output_limit)
-	{
-		pidnow->pid_output = pidnow->output_limit;
-	}
-	if (pidnow->pid_output < -pidnow->output_limit)
-	{
-		pidnow->pid_output = -pidnow->output_limit;
-	}
-	return pidnow->pid_output;
-}
 
 void getSmoothedInput()
 {
@@ -457,28 +384,12 @@ void commutate()
 	comp_change_time = UTILITY_TIMER->cval;
 	/****************************************************/
 	changeCompInput();
-	if (average_interval > 2000 && (stall_protection || RC_CAR_REVERSE))
+	if (average_interval > 2000 && (RC_CAR_REVERSE))
 	{
 		old_routine = 1;
 	}
 	bemfcounter = 0;
-	zcfound = 0;
-	if (use_speed_control_loop && running)
-	{
-		input_override += doPidCalculations(&speedPid, e_com_time, target_e_com_time) / 10000;
-		if (input_override > 2000)
-		{
-			input_override = 2000;
-		}
-		if (input_override < 0)
-		{
-			input_override = 0;
-		}
-		if (zero_crosses < 100)
-		{
-			speedPid.integral = 0;
-		}
-	}
+	zcfound = 0;	
 }
 
 
@@ -499,7 +410,7 @@ void PeriodElapsedCallback()
 		enableCompInterrupts(); // enable comp interrupt
 	}else{
 		bad_count = 0;
-		if (stall_protection || RC_CAR_REVERSE)
+		if (RC_CAR_REVERSE)
 		{
 			if (zero_crosses >= 20 && commutation_interval <= 2000)
 			{
@@ -708,32 +619,7 @@ void tenKhzRoutine()
 			duty_cycle = map(input, 47, 2047, minimum_duty_cycle, TIMER1_MAX_ARR);
 			
 			if (tenkhzcounter % 10 == 0)
-			{ // 1khz PID loop
-				if (use_current_limit && running)
-				{
-					use_current_limit_adjust -= (int16_t)(doPidCalculations(&currentPid, actual_current, CURRENT_LIMIT * 100) / 10000);
-					if (use_current_limit_adjust < minimum_duty_cycle)
-					{
-						use_current_limit_adjust = minimum_duty_cycle;
-					}
-					if (use_current_limit_adjust > duty_cycle)
-					{
-						use_current_limit_adjust = duty_cycle;
-					}
-				}
-
-				if (stall_protection && running)
-				{ // this boosts throttle as the rpm gets lower, for crawlers and rc cars only, do not use for multirotors.
-					stall_protection_adjust += (doPidCalculations(&stallPid, commutation_interval, stall_protect_target_interval)) / 10000;
-					if (stall_protection_adjust > 150)
-					{
-						stall_protection_adjust = 150;
-					}
-					if (stall_protection_adjust <= 0)
-					{
-						stall_protection_adjust = 0;
-					}
-				}
+			{ // 1khz PID loop				
 			}
 			if (!RC_CAR_REVERSE)
 			{
@@ -817,7 +703,7 @@ void tenKhzRoutine()
 		}
 		if (!prop_brake_active)
 		{
-			if (zero_crosses < (20 >> stall_protection))
+			if (zero_crosses < 20)
 			{
 				if (duty_cycle < min_startup_duty)
 				{
@@ -841,11 +727,7 @@ void tenKhzRoutine()
 				}
 			}
 
-			if (stall_protection_adjust > 0)
-			{
-
-				duty_cycle = duty_cycle + (uint16_t)stall_protection_adjust;
-			}
+			
 			if (maximum_throttle_change_ramp)
 			{
 				//	max_duty_cycle_change = map(k_erpm, low_rpm_level, high_rpm_level, 1, 40);
@@ -1107,7 +989,6 @@ int main(void)
 		//use_sin_start = 0;
 		low_rpm_throttle_limit = 1;
 		VARIABLE_PWM = 0;
-		// stall_protection = 1;
 		comp_pwm = 0;
 		stuck_rotor_protection = 0;
 		minimum_duty_cycle = minimum_duty_cycle + 50;
@@ -1128,11 +1009,6 @@ int main(void)
 	armed = 1;
 	adjusted_input = 48;
 	newinput = 48;
-#ifdef FIXED_SPEED_MODE
-	use_speed_control_loop = 1;
-	target_e_com_time = 60000000 / FIXED_SPEED_MODE_RPM / (motor_poles / 2);
-	input = 48;
-#endif
 
 #else
 
@@ -1151,10 +1027,6 @@ int main(void)
 	UN_TIM_Init();
 	receiveDshotDma();
 
-	if (drive_by_rpm)
-	{
-		use_speed_control_loop = 1;
-	}
 #endif
 
 #endif // end fixed duty mode ifdef
@@ -1426,52 +1298,7 @@ int main(void)
 #ifdef FIXED_DUTY_MODE
 			input = FIXED_DUTY_MODE_POWER * 20;
 #else
-
-			
-			if (use_speed_control_loop)
-			{
-				if (drive_by_rpm)
-				{
-					target_e_com_time = 60000000 / map(adjusted_input, 47, 2047, MINIMUM_RPM_SPEED_CONTROL, MAXIMUM_RPM_SPEED_CONTROL) / (motor_poles / 2);
-					if (adjusted_input < 47)
-					{ // dead band ?
-						input = 0;
-						speedPid.error = 0;
-						input_override = 0;
-					}
-					else
-					{
-						input = (uint16_t)input_override; // speed control pid override
-						if (input_override > 2047)
-						{
-							input = 2047;
-						}
-						if (input_override < 48)
-						{
-							input = 48;
-						}
-					}
-				}
-				else
-				{
-
-					input = (uint16_t)input_override; // speed control pid override
-					if (input_override > 1999)
-					{
-						input = 1999;
-					}
-					if (input_override < 48)
-					{
-						input = 48;
-					}
-				}
-			}
-			else
-			{
-
-				input = adjusted_input;
-			}
-			
+			input = adjusted_input;	
 #endif
 		}
 		
@@ -1482,7 +1309,6 @@ int main(void)
 
 		if (low_rpm_throttle_limit)
 		{ // some hardware doesn't need this, its on by default to keep hardware / motors protected but can slow down the response in the very low end a little.
-
 			duty_cycle_maximum = map(k_erpm, low_rpm_level, high_rpm_level, throttle_max_at_low_rpm, throttle_max_at_high_rpm); // for more performance lower the high_rpm_level, set to a consvervative number in source.
 		}
 
@@ -1506,7 +1332,6 @@ int main(void)
 
 		if (motor_kv < 900)
 		{
-
 			filter_level = filter_level * 2;
 		}
 
@@ -1550,13 +1375,6 @@ int main(void)
 			//zcfoundroutine();
 			zcfoundroutine_nonblock();
 
-			// if(stall_protection){
-			// min_startup_duty = 130;
-			// minimum_duty_cycle = minimum_duty_cycle + 10;
-			// if(minimum_duty_cycle > 80){
-			// minimum_duty_cycle = 80;
-			// }
-			// }
 		}
 	
 
