@@ -108,24 +108,21 @@ void computeServoInput(){
 void transfercomplete(){
 	if(armed && dshot_telemetry){
 	    if(out_put){
-
-
-	  	receiveDshotDma();
-	   	return;
-	    }else{
-
-			sendDshotDma();
-			make_dshot_package();
-			computeDshotDMA();
-	    return;
-	    }
+					receiveDshotDma();
+					return;
+			}else{
+					computeDshotDMA();//kikoqiu
+					make_dshot_package();
+					sendDshotDma();
+					return;
+			}
 	}
 
-	  if (inputSet == 0){
+	if (inputSet == 0){
 	 	 detectInput();
-	 	receiveDshotDma();
-	 return;
-	  }
+	 	 receiveDshotDma();
+	   return;
+	}
 
 	if (inputSet == 1){
 
@@ -134,16 +131,15 @@ void transfercomplete(){
 if(dshot_telemetry){
     if(out_put){
 //    	TIM17->CNT = 0;
-    	make_dshot_package();          // this takes around 10us !!
-  	computeDshotDMA();             //this is slow too..
-  	receiveDshotDma();             //holy smokes.. reverse the line and set up dma again
-   	return;
+  	   receiveDshotDma();             //holy smokes.. reverse the line and set up dma again
+   	   return;
     }else{
-		sendDshotDma();
+			 make_dshot_package();          // this takes around 10us !!
+		   sendDshotDma();
+			 computeDshotDMA();             //this is slow too..
     return;
     }
 }else{
-
 		if (dshot == 1){
 			computeDshotDMA();
 			if(send_telemetry){

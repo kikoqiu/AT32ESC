@@ -966,21 +966,55 @@ void commutate()
 	}
 }
 
+
+
+
 void PeriodElapsedCallback()
 {
 	COM_TIMER->iden &= ~TMR_OVF_INT; // disable interrupt
-	commutation_interval = ((3 * commutation_interval) + thiszctime) >> 2;
 	commutate();
-	advance = (commutation_interval >> 3) * advance_level; // 60 divde 8 7.5 degree increments
-	waitTime = (commutation_interval >> 1) - advance;
-	if (!old_routine)
-	{
-		enableCompInterrupts(); // enable comp interrupt
-	}
+
 	if (zero_crosses < 10000)
 	{
 		zero_crosses++;
 	}
+
+	bemfcounter = 0;
+	bad_count = 0;
+	
+	if (!old_routine)
+	{
+		enableCompInterrupts(); // enable comp interrupt
+	}else{
+		if (stall_protection || RC_CAR_REVERSE)
+		{
+			if (zero_crosses >= 20 && commutation_interval <= 2000)
+			{
+				old_routine = 0;
+				enableCompInterrupts(); // enable interrupt
+			}
+		}
+		else
+		{
+			if (zero_crosses > 30)
+			{
+				old_routine = 0;
+				enableCompInterrupts(); // enable interrupt
+			}
+		}
+	}
+}
+void zcfoundroutine_nonblock()
+{
+	thiszctime = INTERVAL_TIMER->cval;
+	INTERVAL_TIMER->cval = 0;
+	commutation_interval = (thiszctime + (3 * commutation_interval)) / 4;
+	advance = commutation_interval / advancedivisor;
+	waitTime = commutation_interval / 2 - advance;
+	COM_TIMER->cval = 0;
+	COM_TIMER->pr = waitTime;
+	COM_TIMER->ists = 0x00;
+	COM_TIMER->iden |= TMR_OVF_INT;
 }
 
 void interruptRoutine()
@@ -1037,11 +1071,18 @@ void interruptRoutine()
 
 	maskPhaseInterrupts();
 	INTERVAL_TIMER->cval = 0;
+
+	commutation_interval = ((3 * commutation_interval) + thiszctime) >> 2;
+	advance = (commutation_interval >> 3) * advance_level; // 60 divde 8 7.5 degree increments
+	waitTime = (commutation_interval >> 1) - advance;
+
 	waitTime = waitTime >> fast_accel;
 	COM_TIMER->cval = 0;
 	COM_TIMER->pr = waitTime;
 	COM_TIMER->ists = 0x00;
 	COM_TIMER->iden |= TMR_OVF_INT;
+
+
 }
 
 void startMotor()
@@ -1551,7 +1592,7 @@ void advanceincrement()
 	TMR1->c3dt = (((2 * pwmSin[phase_C_position] / SINE_DIVIDER) + gate_drive_offset) * TIMER1_MAX_ARR / 2000) * sine_mode_power / 10;
 #endif
 }
-
+/*
 void zcfoundroutine()
 { // only used in polling mode, blocking routine.
 	thiszctime = INTERVAL_TIMER->cval;
@@ -1583,7 +1624,7 @@ void zcfoundroutine()
 			enableCompInterrupts(); // enable interrupt
 		}
 	}
-}
+}*/
 
 int main(void)
 {
@@ -2123,15 +2164,16 @@ int main(void)
 			if (old_routine && running)
 			{
 				maskPhaseInterrupts();
-				getBemfState();
 				if (!zcfound)
 				{
+					getBemfState();
 					if (rising)
 					{
 						if (bemfcounter > min_bemf_counts_up)
 						{
 							zcfound = 1;
-							zcfoundroutine();
+							//zcfoundroutine();
+							zcfoundroutine_nonblock();
 						}
 					}
 					else
@@ -2139,7 +2181,8 @@ int main(void)
 						if (bemfcounter > min_bemf_counts_down)
 						{
 							zcfound = 1;
-							zcfoundroutine();
+							//zcfoundroutine();
+							zcfoundroutine_nonblock();
 						}
 					}
 				}
@@ -2147,7 +2190,6 @@ int main(void)
 			if (INTERVAL_TIMER->cval > 45000 && running == 1)
 			{
 				bemf_timeout_happened++;
-
 				maskPhaseInterrupts();
 				old_routine = 1;
 				if (input < 48)
@@ -2155,7 +2197,9 @@ int main(void)
 					running = 0;
 				}
 				zero_crosses = 0;
-				zcfoundroutine();
+				//zcfoundroutine();
+				zcfoundroutine_nonblock();
+
 				// if(stall_protection){
 				// min_startup_duty = 130;
 				// minimum_duty_cycle = minimum_duty_cycle + 10;
