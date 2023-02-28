@@ -1,158 +1,5 @@
-/* AM32- multi-purpose brushless controller firmware for the stm32f051 */
+/* AM32- multi-purpose brushless controller firmware  */
 
-//===========================================================================
-//=============================== Changelog =================================
-//===========================================================================
-/*
- * 1.54 Changelog;
- * --Added firmware name to targets and firmware version to main
- * --added two more dshot to beacons 1-3 currently working
- * --added KV option to firmware, low rpm power protection is based on KV
- * --start power now controls minimum idle power as well as startup strength.
- * --change default timing to 22.5
- * --Lowered default minimum idle setting to 1.5 percent duty cycle, slider range from 1-2.
- * --Added dshot commands to save settings and reset ESC.
- *
- *1.56 Changelog.
- * -- added check to stall protection to wait until after 40 zero crosses to fix high startup throttle hiccup.
- * -- added TIMER 1 update interrupt and PWM changes are done once per pwm period
- * -- reduce commutation interval averaging length
- * -- reduce false positive filter level to 2 and eliminate threshold where filter is stopped.
- * -- disable interrupt before sounds
- * -- disable TIM1 interrupt during stepper sinusoidal mode
- * -- add 28us delay for dshot300
- * -- report 0 rpm until the first 10 successful steps.
- * -- move serial ADC telemetry calculations and desync check to 10Khz interrupt.
- *
- * 1.57
- * -- remove spurious commutations and rpm data at startup by polling for longer interval on startup
- *
- * 1.58
- * -- move signal timeout to 10khz routine and set armed timeout to one quarter second 2500 / 10000
- * 1.59
- * -- moved comp order definitions to target.h
- * -- fixed update version number if older than new version
- * -- cleanup, moved all input and output to IO.c
- * -- moved comparator functions to comparator.c
- * -- removed ALOT of useless variables
- * -- added siskin target
- * -- moved pwm changes to 10khz routine
- * -- moved basic functions to functions.c
- * -- moved peripherals setup to periherals.c
- * -- added crawler mode settings
- *
- * 1.60
- * -- added sine mode hysteresis
- * -- increased power in stall protection and lowered start rpm for crawlers
- * -- removed onehot125 from crawler mode
- * -- reduced maximum startup power from 400 to 350
- * -- change minimum duty cycle to DEAD_TIME
- * -- version and name moved to permanent spot in FLASH memory, thanks mikeller
- *
- * 1.61
- * -- moved duty cycle calculation to 10khz and added max change option.
- * -- decreased maximum interval change to 25%
- * -- reduce wait time on fast acceleration (fast_accel)
- * -- added check in interrupt for early zero cross
- *
- * 1.62
- * --moved control to 10khz loop
- * --changed condition for low rpm filter for duty cycle from || to &&
- * --introduced max deceleration and set it to 20ms to go from 100 to 0
- * --added configurable servo throttle ranges
- *
- *
- *1.63
- *-- increase time for zero cross error detection below 250us commutation interval
- *-- increase max change a low rpm x10
- *-- set low limit of throttle ramp to a lower point and increase upper range
- *-- change desync event from full restart to just lower throttle.
-
- *1.64
- * --added startup check for continuous high signal, reboot to enter bootloader.
- *-- added brake on stop from eeprom
- *-- added stall protection from eeprom
- *-- added motor pole divider for sinusoidal and low rpm power protection
- *-- fixed dshot commands, added confirmation beeps and removed blocking behavior
- *--
- *1.65
- *-- Added 32 millisecond telemetry output
- *-- added low voltage cutoff , divider value and cutoff voltage needs to be added to eeprom
- *-- added beep to indicate cell count if low voltage active
- *-- added current reading on pa3 , conversion factor needs to be added to eeprom
- *-- fixed servo input capture to only read positive pulse to handle higher refresh rates.
- *-- disabled oneshot 125.
- *-- extended servo range to match full output range of receivers
- *-- added RC CAR style reverse, proportional brake on first reverse , double tap to change direction
- *-- added brushed motor control mode
- *-- added settings to EEPROM version 1
- *-- add gimbal control option.
- *--
- *1.66
- *-- move idwg init to after input tune
- *-- remove reset after save command -- dshot
- *-- added wraith32 target
- *-- added average pulse check for signal detection
- *--
- *1.67
- *-- Rework file structure for multiple MCU support
- *-- Add g071 mcu
- *--
- *1.68
- *--increased allowed average pulse length to avoid double startup
- *1.69
- *--removed line re-enabling comparator after disabling.
- *1.70 fix dshot for Kiss FC
- *1.71 fix dshot for Ardupilot / Px4 FC
- *1.72 Fix telemetry output and add 1 second arming.
- *1.73 Fix false arming if no signal. Remove low rpm throttle protection below 300kv
- *1.74 Add Sine Mode range and drake brake strength adjustment
- *1.75 Disable brake on stop for PWM_ENABLE_BRIDGE
-		 Removed automatic brake on stop on neutral for RC car proportional brake.
-		 Adjust sine speed and stall protection speed to more closely match
-		 makefile fixes from Cruwaller
-		 Removed gd32 build, until firmware is functional
- *1.76 Adjust g071 PWM frequency, and startup power to be same frequency as f051.
-			 Reduce number of polling back emf checks for g071
- *1.77 increase PWM frequency range to 8-48khz
- *1.78 Fix bluejay tunes frequency and speed.
-		 Fix g071 Dead time
-		 Increment eeprom version
- *1.79 Add stick throttle calibration routine
-		 Add variable for telemetry interval
- *1.80 -Enable Comparator blanking for g071 on timer 1 channel 4
-		 -add hardware group F for Iflight Blitz
-		 -adjust parameters for pwm frequency
-		 -add sine mode power variable and eeprom setting
-		 -fix telemetry rpm during sine mode
-		 -fix sounds for extended pwm range
-		 -Add adjustable braking strength when driving
- *1.81 -Add current limiting PID loop
-		 -fix current sense scale
-		 -Increase brake power on maximum reverse ( car mode only)
-		 -Add HK and Blpwr targets
-		 -Change low kv motor throttle limit
-		 -add reverse speed threshold changeover based on motor kv
-		 -doubled filter length for motors under 900kv
-*1.82	-Add speed control pid loop.
-*1.83	-Add stall protection pid loop.
-			 -Improve sine mode transition.
-			 -decrease speed step re-entering sine mode
-			 -added fixed duty cycle and speed mode build option
-			 -added rpm_controlled by input signal ( to be added to config tool )
-*1.84	-Change PID value to int for faster calculations
-		 -Enable two channel brushed motor control for dual motors
-		 -Add current limit max duty cycle
-*1.85	-fix current limit not allowing full rpm on g071 or low pwm frequency
-		-remove unused brake on stop conditional
-*1.90 -Fix double beep on startup
-			-fix brushed mode comparator
-			-add extended dshot
-			-fix drive by rpm mode
-*1.91 -reset average interval on any desync after 100 zero crosses
-*1.92 - increase ADC read rate and filtering
-*1.93 - Add filename to fixed location in flash memory
- */
 
 #ifdef AT32F421K8U7
 #include "at32f421.h"
@@ -194,9 +41,6 @@ uint16_t comp_change_time = 0;
 
 //#define FIXED_SPEED_MODE	// bypasses input signal and runs at a fixed rpm using the speed control loop PID
 //#define FIXED_SPEED_MODE_RPM	1000	// intended final rpm , ensure pole pair numbers are entered correctly in config tool.
-
-//#define BRUSHED_MODE				 // overrides all brushless config settings, enables two channels for brushed control
-//#define GIMBAL_MODE		 // also sinusoidal_startup needs to be on, maps input to sinusoidal angle.
 
 //===========================================================================
 //=============================	Defaults =============================
@@ -473,6 +317,9 @@ uint16_t waitTime = 0;
 uint16_t signaltimeout = 0;
 uint8_t ubAnalogWatchdogStatus = RESET;
 
+#include "settings.h"
+
+
 void checkForHighSignal()
 {
 	changeToInput();
@@ -526,283 +373,6 @@ float doPidCalculations(struct fastPID *pidnow, int actual, int target)
 		pidnow->pid_output = -pidnow->output_limit;
 	}
 	return pidnow->pid_output;
-}
-
-void loadEEpromSettings()
-{
-	read_flash_bin(eepromBuffer, EEPROM_START_ADD, 176);
-
-	if (eepromBuffer[17] == 0x01)
-	{
-		dir_reversed = 1;
-	}
-	else
-	{
-		dir_reversed = 0;
-	}
-	if (eepromBuffer[18] == 0x01)
-	{
-		bi_direction = 1;
-	}
-	else
-	{
-		bi_direction = 0;
-	}
-	if (eepromBuffer[19] == 0x01)
-	{
-		//use_sin_start = 1;
-		//	 min_startup_duty = sin_mode_min_s_d;
-	}
-	if (eepromBuffer[20] == 0x01)
-	{
-		comp_pwm = 1;
-	}
-	else
-	{
-		comp_pwm = 0;
-	}
-	if (eepromBuffer[21] == 0x01)
-	{
-		VARIABLE_PWM = 1;
-	}
-	else
-	{
-		VARIABLE_PWM = 0;
-	}
-	if (eepromBuffer[22] == 0x01)
-	{
-		stuck_rotor_protection = 1;
-	}
-	else
-	{
-		stuck_rotor_protection = 0;
-	}
-	if (eepromBuffer[23] < 4)
-	{
-		advance_level = eepromBuffer[23];
-	}
-	else
-	{
-		advance_level = 2; // * 7.5 increments
-	}
-
-	if (eepromBuffer[24] < 49 && eepromBuffer[24] > 7)
-	{
-		if (eepromBuffer[24] < 49 && eepromBuffer[24] > 23)
-		{
-			TIMER1_MAX_ARR = map(eepromBuffer[24], 24, 144, TIM1_AUTORELOAD, TIM1_AUTORELOAD / 6);
-		}
-		if (eepromBuffer[24] < 24 && eepromBuffer[24] > 11)
-		{
-			TIMER1_MAX_ARR = map(eepromBuffer[24], 12, 24, TIM1_AUTORELOAD * 2, TIM1_AUTORELOAD);
-		}
-		if (eepromBuffer[24] < 12 && eepromBuffer[24] > 7)
-		{
-			TIMER1_MAX_ARR = map(eepromBuffer[24], 7, 16, TIM1_AUTORELOAD * 3, TIM1_AUTORELOAD / 2 * 3);
-		}
-		TMR1->pr = TIMER1_MAX_ARR;
-		throttle_max_at_high_rpm = TIMER1_MAX_ARR;
-		duty_cycle_maximum = TIMER1_MAX_ARR;
-	}
-	else
-	{
-		tim1_arr = TIM1_AUTORELOAD;
-		TMR1->pr = tim1_arr;
-	}
-
-	if (eepromBuffer[25] < 151 && eepromBuffer[25] > 49)
-	{
-		min_startup_duty = (eepromBuffer[25] / 2 + DEAD_TIME) * TIMER1_MAX_ARR / 2000;
-		minimum_duty_cycle = (eepromBuffer[25] / 4 + DEAD_TIME / 4) * TIMER1_MAX_ARR / 2000;
-		stall_protect_minimum_duty = minimum_duty_cycle + 10;
-	}
-	else
-	{
-		min_startup_duty = 150;
-		minimum_duty_cycle = (min_startup_duty / 2) + 10;
-	}
-	motor_kv = (eepromBuffer[26] * 40) + 20;
-	motor_poles = eepromBuffer[27];
-	if (eepromBuffer[28] == 0x01)
-	{
-		brake_on_stop = 1;
-	}
-	else
-	{
-		brake_on_stop = 0;
-	}
-	if (eepromBuffer[29] == 0x01)
-	{
-		stall_protection = 1;
-	}
-	else
-	{
-		stall_protection = 0;
-	}
-	setVolume(5);
-	if (eepromBuffer[1] > 0)
-	{ // these commands weren't introduced until eeprom version 1.
-
-		if (eepromBuffer[30] > 11)
-		{
-			setVolume(5);
-		}
-		else
-		{
-			setVolume(eepromBuffer[30]);
-		}
-		if (eepromBuffer[31] == 0x01)
-		{
-			TLM_ON_INTERVAL = 1;
-		}
-		else
-		{
-			TLM_ON_INTERVAL = 0;
-		}
-		servo_low_threshold = (eepromBuffer[32] * 2) + 750; // anything below this point considered 0
-		servo_high_threshold = (eepromBuffer[33] * 2) + 1750;
-		; // anything above this point considered 2000 (max)
-		servo_neutral = (eepromBuffer[34]) + 1374;
-		servo_dead_band = eepromBuffer[35];
-
-		if (eepromBuffer[36] == 0x01)
-		{
-			LOW_VOLTAGE_CUTOFF = 1;
-		}
-		else
-		{
-			LOW_VOLTAGE_CUTOFF = 0;
-		}
-
-		low_cell_volt_cutoff = eepromBuffer[37] + 250; // 2.5 to 3.5 volts per cell range
-		if (eepromBuffer[38] == 0x01)
-		{
-			RC_CAR_REVERSE = 1;
-		}
-		else
-		{
-			RC_CAR_REVERSE = 0;
-		}
-		if (eepromBuffer[39] == 0x01)
-		{
-#ifdef HAS_HALL_SENSORS
-			USE_HALL_SENSOR = 1;
-#else
-			USE_HALL_SENSOR = 0;
-#endif
-		}
-		else
-		{
-			USE_HALL_SENSOR = 0;
-		}
-		if (eepromBuffer[40] > 4 && eepromBuffer[40] < 26)
-		{ // sine mode changeover 5-25 percent throttle
-			//sine_mode_changeover_thottle_level = eepromBuffer[40];
-		}
-		if (eepromBuffer[41] > 0 && eepromBuffer[41] < 11)
-		{ // drag brake 1-10
-			drag_brake_strength = eepromBuffer[41];
-		}
-
-		if (eepromBuffer[42] > 0 && eepromBuffer[42] < 10)
-		{ // motor brake 1-9
-			driving_brake_strength = eepromBuffer[42];
-			dead_time_override = DEAD_TIME + (150 - (driving_brake_strength * 10));
-			if (dead_time_override > 200)
-			{
-				dead_time_override = 200;
-			}
-			min_startup_duty = eepromBuffer[25] + dead_time_override;
-			minimum_duty_cycle = eepromBuffer[25] / 2 + dead_time_override;
-			throttle_max_at_low_rpm = throttle_max_at_low_rpm + dead_time_override;
-			startup_max_duty_cycle = startup_max_duty_cycle + dead_time_override;
-			//	 TIMER_CCHP(TIMER0)|= TIMER_CCHP_DTCFG & dead_time_override;
-		}
-
-		if (eepromBuffer[43] >= 70 && eepromBuffer[43] <= 140)
-		{
-			TEMPERATURE_LIMIT = eepromBuffer[43];
-		}
-
-		if (eepromBuffer[44] > 0 && eepromBuffer[44] < 100)
-		{
-			CURRENT_LIMIT = eepromBuffer[44] * 2;
-			use_current_limit = 1;
-		}
-		if (eepromBuffer[45] > 0 && eepromBuffer[45] < 11)
-		{
-			//sine_mode_power = eepromBuffer[45];
-		}
-
-		if (motor_kv < 300)
-		{
-			low_rpm_throttle_limit = 0;
-		}
-		low_rpm_level = motor_kv / 100 / (32 / motor_poles);
-		high_rpm_level = motor_kv / 17 / (32 / motor_poles);
-	}
-	reverse_speed_threshold = map(motor_kv, 300, 3000, 2500, 1250);
-	if (!comp_pwm)
-	{
-		bi_direction = 0;
-	}
-}
-
-void saveEEpromSettings()
-{
-
-	eepromBuffer[1] = eeprom_layout_version;
-	if (dir_reversed == 1)
-	{
-		eepromBuffer[17] = 0x01;
-	}
-	else
-	{
-		eepromBuffer[17] = 0x00;
-	}
-	if (bi_direction == 1)
-	{
-		eepromBuffer[18] = 0x01;
-	}
-	else
-	{
-		eepromBuffer[18] = 0x00;
-	}
-	if (0/*use_sin_start == 1*/)
-	{
-		eepromBuffer[19] = 0x01;
-	}
-	else
-	{
-		eepromBuffer[19] = 0x00;
-	}
-
-	if (comp_pwm == 1)
-	{
-		eepromBuffer[20] = 0x01;
-	}
-	else
-	{
-		eepromBuffer[20] = 0x00;
-	}
-	if (VARIABLE_PWM == 1)
-	{
-		eepromBuffer[21] = 0x01;
-	}
-	else
-	{
-		eepromBuffer[21] = 0x00;
-	}
-	if (stuck_rotor_protection == 1)
-	{
-		eepromBuffer[22] = 0x01;
-	}
-	else
-	{
-		eepromBuffer[22] = 0x00;
-	}
-	eepromBuffer[23] = advance_level;
-	save_flash_nolib(eepromBuffer, 176, EEPROM_START_ADD);
 }
 
 void getSmoothedInput()
@@ -1142,7 +712,7 @@ void tenKhzRoutine()
 			telem_ms_count = 0;
 		}
 	}
-#ifndef BRUSHED_MODE	
+
 	{
 		if (input >= 47  && armed)
 		{
@@ -1389,7 +959,7 @@ void tenKhzRoutine()
 	//}
 	//#endif	 //mcu f031
 
-#endif // ndef brushed_mode
+
 
 	if (send_telemetry)
 	{
@@ -1464,39 +1034,7 @@ void tenKhzRoutine()
 #endif
 }
 
-/*
-void zcfoundroutine()
-{ // only used in polling mode, blocking routine.
-	thiszctime = INTERVAL_TIMER->cval;
-	INTERVAL_TIMER->cval = 0;
-	commutation_interval = (thiszctime + (3 * commutation_interval)) / 4;
-	advance = commutation_interval / advancedivisor;
-	waitTime = commutation_interval / 2 - advance;
-	while (INTERVAL_TIMER->cval < waitTime - advance)
-	{
-	}
-	commutate();
-	bemfcounter = 0;
-	bad_count = 0;
 
-	zero_crosses++;
-	if (stall_protection || RC_CAR_REVERSE)
-	{
-		if (zero_crosses >= 20 && commutation_interval <= 2000)
-		{
-			old_routine = 0;
-			enableCompInterrupts(); // enable interrupt
-		}
-	}
-	else
-	{
-		if (zero_crosses > 30)
-		{
-			old_routine = 0;
-			enableCompInterrupts(); // enable interrupt
-		}
-	}
-}*/
 
 int main(void)
 {
@@ -1527,11 +1065,11 @@ int main(void)
 	GPIOB->BSRR = LL_GPIO_PIN_3; //
 #endif
 
-#ifndef BRUSHED_MODE // commutation_timer priority 0
+	// commutation_timer priority 0
 	COM_TIMER->ctrl1_bit.tmren = TRUE;
 	COM_TIMER->swevt |= TMR_OVERFLOW_SWTRIG;
 	COM_TIMER->iden &= ~TMR_OVF_INT;
-#endif
+
 
 	UTILITY_TIMER->ctrl1_bit.tmren = TRUE;
 
@@ -1569,10 +1107,6 @@ int main(void)
 		saveEEpromSettings();
 	}
 
-	/*if (use_sin_start)
-	{
-		min_startup_duty = sin_mode_min_s_d;
-	}*/
 	if (dir_reversed == 1)
 	{
 		forward = 0;
@@ -1585,10 +1119,7 @@ int main(void)
 	startup_max_duty_cycle = startup_max_duty_cycle * TIMER1_MAX_ARR / 2000 + dead_time_override; // adjust for pwm frequency
 	throttle_max_at_low_rpm = throttle_max_at_low_rpm * TIMER1_MAX_ARR / 2000;					  // adjust to new pwm frequency
 	throttle_max_at_high_rpm = TIMER1_MAX_ARR;													  // adjust to new pwm frequency
-	if (!comp_pwm)
-	{
-		//use_sin_start = 0; // sine start requires complementary pwm.
-	}
+
 	adc_counter = 7;
 	if (RC_CAR_REVERSE)
 	{ // overrides a whole lot of things!
@@ -1626,22 +1157,11 @@ int main(void)
 #endif
 
 #else
-#ifdef BRUSHED_MODE
-	maskPhaseInterrupts();
-	commutation_interval = 5000;
-	use_sin_start = 0;
-	playBrushedStartupTune();
-#else
-	//	playStartupTune();
-#endif
+
 	zero_input_count = 0;
 	MX_IWDG_Init();
 	WDT->cmd = WDT_CMD_RELOAD;
 
-#ifdef GIMBAL_MODE
-	bi_direction = 1;
-	use_sin_start = 1;
-#endif
 
 #ifdef USE_ADC_INPUT
 	armed_count_threshold = 5000;

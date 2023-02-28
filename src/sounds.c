@@ -130,28 +130,6 @@ void playStartupTune(){
 	__enable_irq();
 }
 
-void playBrushedStartupTune(){
-	__disable_irq();
-	TMR1->pr = TIM1_AUTORELOAD;
-	setCaptureCompare();
-	comStep(1);       // activate a pwm channel
-	TMR1->div = 40;        // frequency of beep
-    delayMillis(300);         // duration of beep
-	comStep(2);       // activate a pwm channel
-	TMR1->div = 30;        // frequency of beep
-    delayMillis(300);         // duration of beep
-	comStep(3);       // activate a pwm channel
-	TMR1->div = 25;        // frequency of beep
-    delayMillis(300);         // duration of beep
-    comStep(4);
-	TMR1->div = 20;         // higher again..
-	delayMillis(300);
-	allOff();                // turn all channels low again
-	TMR1->div = 0;           // set prescaler back to 0.
-	signaltimeout = 0;
-	TMR1->pr = TIMER1_MAX_ARR;
-	__enable_irq();
-}
 
 void playDuskingTune(){
 	setCaptureCompare();
