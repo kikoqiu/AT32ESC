@@ -148,11 +148,11 @@ void loadEEpromSettings()
 		low_cell_volt_cutoff = eepromBuffer[37] + 250; // 2.5 to 3.5 volts per cell range
 		if (eepromBuffer[38] == 0x01)
 		{
-			RC_CAR_REVERSE = 1;
+			//RC_CAR_REVERSE = 1;
 		}
 		else
 		{
-			RC_CAR_REVERSE = 0;
+			//RC_CAR_REVERSE = 0;
 		}
 		if (eepromBuffer[39] == 0x01)
 		{
