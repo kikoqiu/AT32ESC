@@ -138,7 +138,6 @@ uint16_t telem_ms_count;
 char VOLTAGE_DIVIDER = TARGET_VOLTAGE_DIVIDER; // 100k upper and 10k lower resistor in divider
 uint16_t battery_voltage;					   // scale in volts * 10.	1260 is a battery voltage of 12.60
 char cell_count = 0;
-char brushed_direction_set = 0;
 
 uint16_t tenkhzcounter = 0;
 float consumed_current = 0;
@@ -186,7 +185,7 @@ uint32_t average_interval = 0;
 uint32_t last_average_interval;
 int e_com_time;
 
-uint16_t ADC_smoothed_input = 0;
+
 uint8_t degrees_celsius;
 uint16_t converted_degrees;
 uint8_t temperature_offset;
@@ -400,13 +399,15 @@ void PeriodElapsedCallback()
 	if (!old_routine)
 	{
 		enableCompInterrupts(); // enable comp interrupt
-	}else{
+	}
+	else
+	{
 		bad_count = 0;
 		if (zero_crosses > 30)
 		{
 			old_routine = 0;
 			enableCompInterrupts();
-		}		
+		}
 	}
 }
 
@@ -416,6 +417,7 @@ void queueComm(uint16_t wtime){
 	COM_TIMER->ists = 0x00;
 	COM_TIMER->iden |= TMR_OVF_INT;
 }
+
 void zcfoundroutine_nonblock()
 {
 	thiszctime = INTERVAL_TIMER->cval;
@@ -447,26 +449,19 @@ void interruptRoutine()
 		}
 	}
 	thiszctime = INTERVAL_TIMER->cval;
-	if (rising)
+
+	for (int i = 0; i < filter_level; i++)
 	{
-		for (int i = 0; i < filter_level; i++)
+		if (rising && COMP_VALUE)
 		{
-			if (COMP_VALUE)
-			{
-				return;
-			}
+			return;
 		}
-	}
-	else
-	{
-		for (int i = 0; i < filter_level; i++)
+		if (!rising && !COMP_VALUE)
 		{
-			if (!COMP_VALUE)
-			{
-				return;
-			}
+			return;
 		}
-	}
+	}	
+
 
 	maskPhaseInterrupts();
 	INTERVAL_TIMER->cval = 0;
@@ -770,21 +765,11 @@ void tenKhzRoutine()
 		//	}
 		last_average_interval = average_interval;
 	}
-	//#ifndef MCU_F031
-	// if(commutation_interval > 400){
-	//		 NVIC_SetPriority(IC_DMA_IRQ_NAME, 0);
-	//		 NVIC_SetPriority(ADC_CMP_IRQn, 1);
-	//}else{
-	//	NVIC_SetPriority(IC_DMA_IRQ_NAME, 1);
-	//	NVIC_SetPriority(ADC_CMP_IRQn, 0);
-	//}
-	//#endif	 //mcu f031
 
-
-
+#ifdef USE_SERIAL_TELEMETRY
 	if (send_telemetry)
 	{
-#ifdef USE_SERIAL_TELEMETRY
+
 		makeTelemPackage(degrees_celsius,
 						 battery_voltage,
 						 actual_current,
@@ -792,20 +777,11 @@ void tenKhzRoutine()
 						 e_rpm);
 		send_telem_DMA();
 		send_telemetry = 0;
-#endif
 	}
+#endif
+
 #if defined(FIXED_DUTY_MODE) || defined(FIXED_SPEED_MODE)
-
-//		if(INPUT_PIN_PORT->IDR & INPUT_PIN){
-//			signaltimeout ++;
-//			if(signaltimeout > 10000){
-//				NVIC_SystemReset();
-//			}
-//		}else{
-//			signaltimeout = 0;
-//		}
 #else
-
 	signaltimeout++;
 
 	if (signaltimeout > 2500 * (servoPwm + 1))
@@ -855,10 +831,103 @@ void tenKhzRoutine()
 #endif
 }
 
+void bidirection_test_change_direction(){
+	if(dshot == 0)
+	{		
+		if (newinput > (1000 + (servo_dead_band << 1)))
+		{
+			if (forward == dir_reversed)
+			{
+				if (commutation_interval > reverse_speed_threshold)
+				{
+					forward = 1 - dir_reversed;
+					zero_crosses = 0;
+					old_routine = 1;
+					maskPhaseInterrupts();
+				}
+				else
+				{
+					newinput = 1000;
+				}
+			}
+			adjusted_input = map(newinput, 1000 + (servo_dead_band << 1), 2000, 47, 2047);
+		}
+		if (newinput < (1000 - (servo_dead_band << 1)))
+		{
+			if (forward == (1 - dir_reversed))
+			{
+				if (commutation_interval > reverse_speed_threshold)
+				{
+					zero_crosses = 0;
+					old_routine = 1;
+					forward = dir_reversed;
+					maskPhaseInterrupts();
+				}
+				else
+				{
+					newinput = 1000;
+				}
+			}
+			adjusted_input = map(newinput, 0, 1000 - (servo_dead_band << 1), 2047, 47);
+		}
 
+		if (newinput >= (1000 - (servo_dead_band << 1)) && newinput <= (1000 + (servo_dead_band << 1)))
+		{
+			adjusted_input = 0;
+		}
+		
+	}
+	else
+	{
+		if (newinput > 1047)
+		{
+
+			if (forward == dir_reversed)
+			{
+				if (commutation_interval > reverse_speed_threshold )
+				{
+					forward = 1 - dir_reversed;
+					zero_crosses = 0;
+					old_routine = 1;
+					maskPhaseInterrupts();
+				}
+				else
+				{
+					newinput = 0;
+				}
+			}
+			adjusted_input = ((newinput - 1048) * 2 + 47) - reversing_dead_band;
+		}
+		if (newinput <= 1047 && newinput > 47)
+		{
+			//	startcount++;
+			if (forward == (1 - dir_reversed))
+			{
+				if (commutation_interval > reverse_speed_threshold )
+				{
+					zero_crosses = 0;
+					old_routine = 1;
+					forward = dir_reversed;
+					maskPhaseInterrupts();
+				}
+				else
+				{
+					newinput = 0;
+				}
+			}
+			adjusted_input = ((newinput - 48) * 2 + 47) - reversing_dead_band;
+		}
+		if (newinput < 48)
+		{
+			adjusted_input = 0;
+		}
+	}
+}
 
 int main(void)
 {
+	uint16_t ADC_smoothed_input = 0;
+
 	__enable_irq();
 
 	adc_counter = 2;
@@ -984,7 +1053,6 @@ int main(void)
 		adc_counter++;
 		if (adc_counter > 200)
 		{ // for testing adc and telemetry
-
 			ADC_raw_temp = ADC_raw_temp - (temperature_offset);
 			converted_degrees = (12600 - (int32_t)ADC_raw_temp * 33000 / 4096) / -42 + 25;
 			degrees_celsius = (7 * degrees_celsius + converted_degrees) >> 3;
@@ -1026,8 +1094,8 @@ int main(void)
 			}
 #endif
 		}
-#ifdef USE_ADC_INPUT
 
+#ifdef USE_ADC_INPUT
 		signaltimeout = 0;
 		ADC_smoothed_input = (((10 * ADC_smoothed_input) + ADC_raw_input) / 11);
 		newinput = ADC_smoothed_input / 2;
@@ -1036,103 +1104,13 @@ int main(void)
 			newinput = 2000;
 		}
 #endif
+
+
+
 		stuckcounter = 0;
 
-		if (bi_direction == 1 && dshot == 0)
-		{		
-			if (newinput > (1000 + (servo_dead_band << 1)))
-			{
-				if (forward == dir_reversed)
-				{
-					if (commutation_interval > reverse_speed_threshold)
-					{
-						forward = 1 - dir_reversed;
-						zero_crosses = 0;
-						old_routine = 1;
-						maskPhaseInterrupts();
-						brushed_direction_set = 0;
-					}
-					else
-					{
-						newinput = 1000;
-					}
-				}
-				adjusted_input = map(newinput, 1000 + (servo_dead_band << 1), 2000, 47, 2047);
-			}
-			if (newinput < (1000 - (servo_dead_band << 1)))
-			{
-				if (forward == (1 - dir_reversed))
-				{
-					if (commutation_interval > reverse_speed_threshold)
-					{
-						zero_crosses = 0;
-						old_routine = 1;
-						forward = dir_reversed;
-						maskPhaseInterrupts();
-						brushed_direction_set = 0;
-					}
-					else
-					{
-						newinput = 1000;
-					}
-				}
-				adjusted_input = map(newinput, 0, 1000 - (servo_dead_band << 1), 2047, 47);
-			}
-
-			if (newinput >= (1000 - (servo_dead_band << 1)) && newinput <= (1000 + (servo_dead_band << 1)))
-			{
-				adjusted_input = 0;
-				brushed_direction_set = 0;
-			}
-			
-		}
-		else if (dshot && bi_direction)
-		{
-			if (newinput > 1047)
-			{
-
-				if (forward == dir_reversed)
-				{
-					if (commutation_interval > reverse_speed_threshold )
-					{
-						forward = 1 - dir_reversed;
-						zero_crosses = 0;
-						old_routine = 1;
-						maskPhaseInterrupts();
-						brushed_direction_set = 0;
-					}
-					else
-					{
-						newinput = 0;
-					}
-				}
-				adjusted_input = ((newinput - 1048) * 2 + 47) - reversing_dead_band;
-			}
-			if (newinput <= 1047 && newinput > 47)
-			{
-				//	startcount++;
-				if (forward == (1 - dir_reversed))
-				{
-					if (commutation_interval > reverse_speed_threshold )
-					{
-						zero_crosses = 0;
-						old_routine = 1;
-						forward = dir_reversed;
-						maskPhaseInterrupts();
-						brushed_direction_set = 0;
-					}
-					else
-					{
-						newinput = 0;
-					}
-				}
-				adjusted_input = ((newinput - 48) * 2 + 47) - reversing_dead_band;
-			}
-			if (newinput < 48)
-			{
-				adjusted_input = 0;
-				brushed_direction_set = 0;
-			}
+		if (bi_direction){
+			bidirection_test_change_direction();
 		}
 		else
 		{
