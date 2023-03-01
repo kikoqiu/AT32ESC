@@ -29,7 +29,6 @@
 #include "common.h"
 #include "firmwareversion.h"
 
-uint16_t comp_change_time = 0;
 
 #define VERSION_MAJOR 1
 #define VERSION_MINOR 93
@@ -43,8 +42,13 @@ uint16_t comp_change_time = 0;
 //#define FIXED_SPEED_MODE_RPM	1000	// intended final rpm , ensure pole pair numbers are entered correctly in config tool.
 
 //===========================================================================
-//=============================	Defaults =============================
+//=============================	Settings =============================
 //===========================================================================
+uint8_t EEPROM_VERSION;
+uint8_t eepromBuffer[176] = {0};
+
+const char VOLTAGE_DIVIDER = TARGET_VOLTAGE_DIVIDER; // 100k upper and 10k lower resistor in divider
+
 uint16_t target_e_com_time_high;
 uint16_t target_e_com_time_low;
 
@@ -64,8 +68,6 @@ char advance_level = 2;			 // 7.5 degree increments 0 , 7.5, 15, 22.5)
 uint16_t motor_kv = 2000;
 char motor_poles = 14;//not used
 
-uint16_t CURRENT_LIMIT = 202;
-//uint8_t sine_mode_power = 5;
 char drag_brake_strength = 10; // Drag Brake Power when brake on stop is enabled
 uint8_t driving_brake_strength = 10;
 uint8_t dead_time_override = DEAD_TIME;
@@ -82,13 +84,7 @@ uint8_t servo_dead_band = 100;
 char LOW_VOLTAGE_CUTOFF = 0;		 // Turn Low Voltage CUTOFF on or off
 uint16_t low_cell_volt_cutoff = 330; // 3.3volts per cell
 
-//=========================== END EEPROM Defaults ===========================
-uint8_t EEPROM_VERSION;
-
-// move these to targets folder or peripherals for each mcu
-
-
-
+uint16_t CURRENT_LIMIT = 202;
 const int16_t use_current_limit_adjust = 2000;
 char use_current_limit = 0;
 
@@ -97,22 +93,11 @@ const char maximum_throttle_change_ramp = 1;
 
 char low_rpm_throttle_limit = 1;
 
-const char VOLTAGE_DIVIDER = TARGET_VOLTAGE_DIVIDER; // 100k upper and 10k lower resistor in divider
-
 uint16_t min_startup_duty = 120;
-
 char reversing_dead_band = 1;
-
-
-typedef enum
-{
-	GPIO_PIN_RESET = 0U,
-	GPIO_PIN_SET
-} GPIO_PinState;
 
 uint16_t startup_max_duty_cycle = 300 + DEAD_TIME;
 uint16_t minimum_duty_cycle = DEAD_TIME;
-
 
 uint16_t tim1_arr = TIM1_AUTORELOAD;		   // current auto reset value
 uint16_t TIMER1_MAX_ARR = TIM1_AUTORELOAD;	   // maximum auto reset register value
@@ -122,94 +107,30 @@ uint16_t high_rpm_level = 70;				   //
 uint16_t throttle_max_at_low_rpm = 400;
 uint16_t throttle_max_at_high_rpm = TIM1_AUTORELOAD;
 
+#include "settings.h"
 
 
+//===========================================================================
+//=============================	Variables =============================
+//===========================================================================
 
-
+//util variable
 char boot_up_tune_played = 0;
-uint16_t armed_timeout_count;
-uint8_t desync_happened = 0;
-uint16_t low_voltage_count = 0;
-uint16_t telem_ms_count;
-uint16_t battery_voltage;					   // scale in volts * 10.	1260 is a battery voltage of 12.60
-char cell_count = 0;
-
-uint16_t tenkhzcounter = 0;
-float consumed_current = 0;
-uint16_t smoothed_raw_current = 0;
-uint16_t actual_current = 0;
-
-char bemf_timeout = 10;
-uint16_t low_pin_count = 0;
-
-uint8_t max_duty_cycle_change = 2;
-char fast_accel = 1;
-
-uint16_t last_duty_cycle = 0;
 char play_tone_flag = 0;
-
-char desync_check = 0;
-
-
-uint16_t commutation_intervals[6] = {0};
-uint32_t average_interval = 0;
-uint32_t last_average_interval;
-int e_com_time;
-char polling_mode = 0;
+uint16_t armed_timeout_count;
+uint16_t telem_ms_count;
+uint16_t tenkhzcounter = 0;
+uint16_t low_pin_count = 0;
+uint16_t signaltimeout = 0;
+uint16_t zero_input_count = 0;
+uint16_t comp_change_time = 0;
 
 
-//adc and telem data
-uint8_t degrees_celsius;
-uint16_t converted_degrees;
-uint8_t temperature_offset;
-uint16_t ADC_raw_temp;
-uint16_t ADC_raw_volts;
-uint16_t ADC_raw_current;
-uint16_t ADC_raw_input;
-uint8_t adc_counter = 0;
-char send_telemetry = 0;
-char telemetry_done = 0;
-
-
-char prop_brake_active = 0;
-
-uint8_t eepromBuffer[176] = {0};
-
+//input 
 char dshot_telemetry = 0;
 uint8_t last_dshot_command = 0;
-
-
-
-#define TEMP30_CAL_VALUE ((uint16_t *)((uint32_t)0x1FFFF7B8))
-#define TEMP110_CAL_VALUE ((uint16_t *)((uint32_t)0x1FFFF7C2))
-
-
-
-uint8_t bemf_timeout_happened = 0;
-uint8_t changeover_step = 5;
-uint8_t filter_level = 5;
-uint8_t running = 0;
-uint16_t advance = 0;
-const uint8_t advancedivisor = 4;
-char rising = 1;
-
-
-char forward = 1;
-uint16_t gate_drive_offset = DEAD_TIME;
-
-uint8_t stuckcounter = 0;
-uint16_t k_erpm;
-uint16_t e_rpm; // electrical revolution /100 so,	123 is 12300 erpm
-
-uint16_t adjusted_duty_cycle;
-
-uint8_t bad_count = 0;
 uint8_t dshotcommand;
-uint16_t armed_count_threshold = 1000;
-
 char armed = 0;
-uint16_t zero_input_count = 0;
-
 
 uint16_t input = 0;//current used input value
 uint16_t newinput = 0;//new input value received
@@ -218,10 +139,41 @@ uint16_t adjusted_input = 0;//adjusted new input value
 char inputSet = 0;
 char dshot = 0;
 char servoPwm = 0;
-uint32_t zero_crosses;
 
+uint16_t duty_cycle = 0;
+uint8_t max_duty_cycle_change = 2;
+uint16_t last_duty_cycle = 0;
+
+
+//motor control
+uint16_t commutation_intervals[6] = {0};
+uint32_t average_interval = 0;
+uint32_t last_average_interval;
+int e_com_time;
+char polling_mode = 0;
+char prop_brake_active = 0;
+char fast_accel = 1;
+
+char forward = 1;
+uint8_t stuckcounter = 0;
+char step = 1;
+uint16_t commutation_interval = 12500;
+
+uint16_t k_erpm;
+uint16_t e_rpm; // electrical revolution /100 so,	123 is 12300 erpm
+
+char rising = 1;
+uint8_t bemf_timeout_happened = 0;
+uint8_t changeover_step = 5;
+uint8_t filter_level = 5;
+uint8_t running = 0;
+const uint8_t advancedivisor = 4;
+uint8_t bad_count = 0;
+
+uint32_t zero_crosses;
 uint8_t zcfound = 0;
 
+char bemf_timeout = 10;
 uint8_t bemfcounter;
 uint8_t min_bemf_counts_up = TARGET_MIN_BEMF_COUNTS;
 uint8_t min_bemf_counts_down = TARGET_MIN_BEMF_COUNTS;
@@ -229,15 +181,40 @@ uint8_t min_bemf_counts_down = TARGET_MIN_BEMF_COUNTS;
 uint16_t lastzctime;
 uint16_t thiszctime;
 
-uint16_t duty_cycle = 0;
-char step = 1;
-uint16_t commutation_interval = 12500;
+char desync_check = 0;
+uint8_t desync_happened = 0;
 
-uint16_t signaltimeout = 0;
-uint8_t ubAnalogWatchdogStatus = RESET;
 
-#include "settings.h"
+//adc and serial telem
+uint8_t degrees_celsius;
+uint16_t converted_degrees;
+uint8_t temperature_offset;
+uint16_t ADC_raw_temp;
+uint16_t ADC_raw_volts;
+uint16_t ADC_raw_current;
+uint16_t ADC_raw_input;
+char send_telemetry = 0;
+char telemetry_done = 0;
 
+uint16_t low_voltage_count = 0;
+uint16_t battery_voltage;					   // scale in volts * 10.	1260 is a battery voltage of 12.60
+char cell_count = 0;
+float consumed_current = 0;
+uint16_t smoothed_raw_current = 0;
+uint16_t actual_current = 0;
+
+
+
+
+
+typedef enum
+{
+	GPIO_PIN_RESET = 0U,
+	GPIO_PIN_SET
+} GPIO_PinState;
+
+#define TEMP30_CAL_VALUE ((uint16_t *)((uint32_t)0x1FFFF7B8))
+#define TEMP110_CAL_VALUE ((uint16_t *)((uint32_t)0x1FFFF7C2))
 
 void checkForHighSignal()
 {
@@ -268,11 +245,7 @@ void checkForHighSignal()
 void getBemfState()
 {
 	uint8_t current_state = 0;
-#ifdef MCU_AT415
-	current_state = !(CMP->ctrlsts1_bit.cmp1value); // polarity reversed
-#else
-	current_state = !(CMP->ctrlsts_bit.cmpvalue); // polarity reversed
-#endif
+	current_state = !COMP_VALUE; // polarity reversed
 	if (rising)
 	{
 		if (current_state)
@@ -383,6 +356,7 @@ void zcfoundroutine_nonblock()
 	thiszctime = INTERVAL_TIMER->cval;
 	INTERVAL_TIMER->cval = 0;
 	commutation_interval = (thiszctime + (3 * commutation_interval)) / 4;
+	uint16_t advance = 0;
 	advance = commutation_interval / advancedivisor;
 	uint16_t waitTime  = commutation_interval / 2 - advance;
 	queueComm(waitTime);
@@ -427,6 +401,7 @@ void interruptRoutine()
 	INTERVAL_TIMER->cval = 0;
 
 	commutation_interval = ((3 * commutation_interval) + thiszctime) >> 2;
+	uint16_t advance = 0;
 	advance = (commutation_interval >> 3) * advance_level; // 60 divde 8 7.5 degree increments
 	uint16_t waitTime = (commutation_interval >> 1) - advance;
 	queueComm(waitTime >> fast_accel);
@@ -677,6 +652,7 @@ void tenKhzRoutine()
 				}
 			}
 		}
+		uint16_t adjusted_duty_cycle;
 		if ((armed && running) && input > 47)
 		{
 			if (VARIABLE_PWM)
@@ -885,16 +861,8 @@ uint16_t bidirection_test_change_direction(uint16_t inputval){
 	}
 	return ret;
 }
-
-int main(void)
-{
-	uint16_t ADC_smoothed_input = 0;
-
-	__enable_irq();
-
-	adc_counter = 2;
-	initCorePeripherals();
-
+void initTimers(){
+	
 	tmr_channel_enable(TMR1, TMR_SELECT_CHANNEL_1, TRUE);
 	tmr_channel_enable(TMR1, TMR_SELECT_CHANNEL_2, TRUE);
 	tmr_channel_enable(TMR1, TMR_SELECT_CHANNEL_3, TRUE);
@@ -909,7 +877,6 @@ int main(void)
 	/* Force update generation */
 	TMR1->swevt |= TMR_OVERFLOW_SWTRIG;
 
-	adc_counter = 4;
 #ifdef USE_RGB_LED
 	LED_GPIO_init();
 	GPIOB->BRR = LL_GPIO_PIN_8; // turn on red
@@ -928,26 +895,39 @@ int main(void)
 	INTERVAL_TIMER->ctrl1_bit.tmren = TRUE;
 
 	INTERVAL_TIMER->swevt |= TMR_OVERFLOW_SWTRIG;
-	adc_counter = 5;
 
 	TEN_KHZ_TIMER->ctrl1_bit.tmren = TRUE;
 	TEN_KHZ_TIMER->swevt |= TMR_OVERFLOW_SWTRIG;
 	TEN_KHZ_TIMER->iden |= TMR_OVF_INT;
 
-#ifdef USE_ADC
-	ADC_Init();
-#endif
-
-#ifdef USE_ADC_INPUT
-
-#else
+#ifndef USE_ADC_INPUT
 	tmr_channel_enable(IC_TIMER_REGISTER, IC_TIMER_CHANNEL, TRUE);
 	IC_TIMER_REGISTER->ctrl1_bit.tmren = TRUE;
 
 #endif
 
-	adc_counter = 6;
+}
+
+int main(void)
+{
+	uint16_t ADC_smoothed_input = 0;
+
+	__enable_irq();
+
+	initCorePeripherals();
+	initTimers();
+
+#ifdef USE_ADC
+	ADC_Init();
+#endif
+
 	loadEEpromSettings();
+	tim1_arr = TIMER1_MAX_ARR;
+	startup_max_duty_cycle = startup_max_duty_cycle * TIMER1_MAX_ARR / 2000 + dead_time_override; // adjust for pwm frequency
+	throttle_max_at_low_rpm = throttle_max_at_low_rpm * TIMER1_MAX_ARR / 2000;					  // adjust to new pwm frequency
+	throttle_max_at_high_rpm = TIMER1_MAX_ARR;			  									  // adjust to new pwm frequency
+
+
 	if (VERSION_MAJOR != eepromBuffer[3] || VERSION_MINOR != eepromBuffer[4])
 	{
 		eepromBuffer[3] = VERSION_MAJOR;
@@ -959,21 +939,6 @@ int main(void)
 		saveEEpromSettings();
 	}
 
-	if (dir_reversed == 1)
-	{
-		forward = 0;
-	}
-	else
-	{
-		forward = 1;
-	}
-	tim1_arr = TIMER1_MAX_ARR;
-	startup_max_duty_cycle = startup_max_duty_cycle * TIMER1_MAX_ARR / 2000 + dead_time_override; // adjust for pwm frequency
-	throttle_max_at_low_rpm = throttle_max_at_low_rpm * TIMER1_MAX_ARR / 2000;					  // adjust to new pwm frequency
-	throttle_max_at_high_rpm = TIMER1_MAX_ARR;													  // adjust to new pwm frequency
-
-	adc_counter = 7;
-
 
 #if defined(FIXED_DUTY_MODE) || defined(FIXED_SPEED_MODE)
 	MX_IWDG_Init();
@@ -982,27 +947,23 @@ int main(void)
 	armed = 1;
 	adjusted_input = 48;
 	newinput = 48;
-
 #else
 
 	zero_input_count = 0;
 	MX_IWDG_Init();
 	WDT->cmd = WDT_CMD_RELOAD;
 
-
-#ifdef USE_ADC_INPUT
-	armed_count_threshold = 5000;
-	inputSet = 1;
-
-#else
-	adc_counter = 8;
-	UN_TIM_Init();
-	receiveDshotDma();
-#endif
+	#ifdef USE_ADC_INPUT
+		inputSet = 1;
+	#else
+		UN_TIM_Init();
+		receiveDshotDma();
+	#endif
 
 #endif // end fixed duty mode ifdef
 
-	adc_counter = 9;
+	forward = 1-dir_reversed;
+	uint8_t adc_counter = 9;
 	while (1)
 	{
 		WDT->cmd = WDT_CMD_RELOAD;
@@ -1062,15 +1023,12 @@ int main(void)
 		}
 #endif
 
-
-
 		stuckcounter = 0;
 
 		if (bi_direction){
 			adjusted_input = bidirection_test_change_direction(newinput);
 		}
-		else
-		{
+		else{
 			adjusted_input = newinput;
 		}
 		
@@ -1091,7 +1049,6 @@ int main(void)
 		{
 			bemf_timeout_happened = 0;
 		}
-
 
 		
 		if (adjusted_input < 150)
@@ -1123,8 +1080,6 @@ int main(void)
 			input = adjusted_input;	
 #endif
 		}
-		
-		
 
 		e_rpm = running * (100000 / e_com_time) * 6; // in tens of rpm
 		k_erpm = e_rpm / 10;						 // ecom time is time for one electrical revolution in microseconds
@@ -1157,7 +1112,7 @@ int main(void)
 			filter_level = filter_level * 2;
 		}
 
-		/**************** old routine*********************/
+		/**************** polling mode *********************/
 		if (polling_mode && running)
 		{
 			maskPhaseInterrupts();
@@ -1169,7 +1124,6 @@ int main(void)
 					if (bemfcounter > min_bemf_counts_up)
 					{
 						zcfound = 1;
-						//zcfoundroutine();
 						zcfoundroutine_nonblock();
 					}
 				}
@@ -1178,7 +1132,6 @@ int main(void)
 					if (bemfcounter > min_bemf_counts_down)
 					{
 						zcfound = 1;
-						//zcfoundroutine();
 						zcfoundroutine_nonblock();
 					}
 				}
@@ -1194,11 +1147,7 @@ int main(void)
 				running = 0;
 			}
 			zero_crosses = 0;
-			//zcfoundroutine();
 			zcfoundroutine_nonblock();
-
 		}
-	
-
 	}
 }

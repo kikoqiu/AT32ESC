@@ -116,7 +116,6 @@ void detectInput(){
 		dshot = 1;
 		buffer_divider = 44;
 		dshot_runout_timer = 65000;
-		armed_count_threshold = 10000;
 		buffersize = 32;
 	}
 #ifdef MCU_AT415
@@ -131,12 +130,10 @@ void detectInput(){
 		IC_TIMER_REGISTER->cval = 0xffff;
 		buffer_divider = 44;
 		dshot_runout_timer = 65000;
-		armed_count_threshold = 10000;
 		buffersize = 32;
 	}
 //	if ((smallestnumber > 100 )&&(smallestnumber < 400)){
 //		multishot = 1;
-//		armed_count_threshold = 1000;
 //		buffersize = 4;
 //	}
 //	if ((smallestnumber > 2000 )&&(smallestnumber < 3000)){
@@ -145,7 +142,6 @@ void detectInput(){
 		if (smallestnumber > 30 && smallestnumber < 20000){
 			servoPwm = 1;
 			ic_timer_prescaler=119;
-			armed_count_threshold = 35;
 			buffersize = 2;
 		}
 
