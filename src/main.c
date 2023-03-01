@@ -216,64 +216,24 @@ typedef enum
 #define TEMP30_CAL_VALUE ((uint16_t *)((uint32_t)0x1FFFF7B8))
 #define TEMP110_CAL_VALUE ((uint16_t *)((uint32_t)0x1FFFF7C2))
 
-void checkForHighSignal()
-{
-	changeToInput();
-	gpio_mode_QUICK(INPUT_PIN_PORT, GPIO_MODE_INPUT, GPIO_PULL_DOWN, INPUT_PIN);
-	delayMicros(100);
-	for (int i = 0; i < 1000; i++)
-	{
-		if (!((INPUT_PIN_PORT->idt & INPUT_PIN)))
-		{ // if the pin is low for 5 checks out of 100 in	100ms or more its either no signal or signal. jump to application
-			low_pin_count++;
-		}
-		delayMicros(10);
-	}
-	gpio_mode_QUICK(INPUT_PIN_PORT, GPIO_MODE_MUX, GPIO_PULL_NONE, INPUT_PIN);
-	if (low_pin_count > 5)
-	{
-		return; // its either a signal or a disconnected pin
-	}
-	else
-	{
-		allOff();
-		NVIC_SystemReset();
-	}
-}
+
 
 
 void getBemfState()
 {
-	uint8_t current_state = 0;
-	current_state = !COMP_VALUE; // polarity reversed
-	if (rising)
+	uint8_t current_state = !COMP_VALUE; // polarity reversed
+	if ((rising && current_state) ||
+		(!rising && !current_state)
+		)
 	{
-		if (current_state)
-		{
-			bemfcounter++;
-		}
-		else
-		{
-			bad_count++;
-			if (bad_count > 2)
-			{
-				bemfcounter = 0;
-			}
-		}
+		bemfcounter++;
 	}
 	else
 	{
-		if (!current_state)
+		bad_count++;
+		if (bad_count > 2)
 		{
-			bemfcounter++;
-		}
-		else
-		{
-			bad_count++;
-			if (bad_count > 2)
-			{
-				bemfcounter = 0;
-			}
+			bemfcounter = 0;
 		}
 	}
 }
@@ -329,22 +289,22 @@ void PeriodElapsedCallback()
 		zero_crosses++;
 	}
 	
-	if (!polling_mode)
-	{
-		enableCompInterrupts(); // enable comp interrupt
-	}
-	else
+	if (polling_mode)
 	{
 		bad_count = 0;
 		if (zero_crosses > 30)
 		{
 			polling_mode = 0;
-			enableCompInterrupts();
 		}
+	}
+
+	if (!polling_mode)
+	{
+		enableCompInterrupts(); // enable comp interrupt
 	}
 }
 
-void queueComm(uint16_t wtime){
+void queueCommEvent(uint16_t wtime){
 	COM_TIMER->cval = 0;
 	COM_TIMER->pr = wtime;
 	COM_TIMER->ists = 0x00;
@@ -359,7 +319,7 @@ void zcfoundroutine_nonblock()
 	uint16_t advance = 0;
 	advance = commutation_interval / advancedivisor;
 	uint16_t waitTime  = commutation_interval / 2 - advance;
-	queueComm(waitTime);
+	queueCommEvent(waitTime);
 }
 
 void interruptRoutine()
@@ -394,8 +354,7 @@ void interruptRoutine()
 		{
 			return;
 		}
-	}	
-
+	}
 
 	maskPhaseInterrupts();
 	INTERVAL_TIMER->cval = 0;
@@ -404,7 +363,7 @@ void interruptRoutine()
 	uint16_t advance = 0;
 	advance = (commutation_interval >> 3) * advance_level; // 60 divde 8 7.5 degree increments
 	uint16_t waitTime = (commutation_interval >> 1) - advance;
-	queueComm(waitTime >> fast_accel);
+	queueCommEvent(waitTime >> fast_accel);
 }
 
 void startMotor()
@@ -418,6 +377,84 @@ void startMotor()
 	}
 	enableCompInterrupts();
 }
+
+
+void checkSignalTimeout(){
+#if defined(FIXED_DUTY_MODE) || defined(FIXED_SPEED_MODE)
+#else
+	signaltimeout++;
+
+	if (signaltimeout > 2500 * (servoPwm + 1))
+	{ // quarter second timeout when armed half second for servo;
+		if (armed)
+		{
+			allOff();
+			armed = 0;
+			input = 0;
+			inputSet = 0;
+			zero_input_count = 0;
+
+			TMR1->c1dt = 0;
+			TMR1->c2dt = 0;
+			TMR1->c3dt = 0;
+
+			IC_TIMER_REGISTER->div = 0;
+			IC_TIMER_REGISTER->cval = 0;
+
+			for (int i = 0; i < 64; i++)
+			{
+				dma_buffer[i] = 0;
+			}
+			NVIC_SystemReset();
+		}
+
+		if (signaltimeout > 25000)
+		{ // 2.5 second
+			allOff();
+			armed = 0;
+			input = 0;
+			inputSet = 0;
+			zero_input_count = 0;
+
+			TMR1->c1dt = 0;
+			TMR1->c2dt = 0;
+			TMR1->c3dt = 0;
+			IC_TIMER_REGISTER->div = 0;
+			IC_TIMER_REGISTER->cval = 0;
+			for (int i = 0; i < 64; i++)
+			{
+				dma_buffer[i] = 0;
+			}
+			NVIC_SystemReset();
+		}
+	}
+#endif
+}
+/*
+void checkForHighSignal()
+{
+	changeToInput();
+	gpio_mode_QUICK(INPUT_PIN_PORT, GPIO_MODE_INPUT, GPIO_PULL_DOWN, INPUT_PIN);
+	delayMicros(100);
+	for (int i = 0; i < 1000; i++)
+	{
+		if (!((INPUT_PIN_PORT->idt & INPUT_PIN)))
+		{ // if the pin is low for 5 checks out of 100 in	100ms or more its either no signal or signal. jump to application
+			low_pin_count++;
+		}
+		delayMicros(10);
+	}
+	gpio_mode_QUICK(INPUT_PIN_PORT, GPIO_MODE_MUX, GPIO_PULL_NONE, INPUT_PIN);
+	if (low_pin_count > 5)
+	{
+		return; // its either a signal or a disconnected pin
+	}
+	else
+	{
+		allOff();
+		NVIC_SystemReset();
+	}
+}*/
 
 void tenKhzRoutine()
 {
@@ -510,175 +547,176 @@ void tenKhzRoutine()
 		}
 	}
 
+	
+	if (input >= 47  && armed)
 	{
-		if (input >= 47  && armed)
+		if (running == 0)
 		{
-			if (running == 0)
+			allOff();
+			if (!polling_mode)
 			{
-				allOff();
-				if (!polling_mode)
-				{
-					startMotor();
-				}
-				running = 1;
-				last_duty_cycle = min_startup_duty;
+				startMotor();
 			}
-			duty_cycle = map(input, 47, 2047, minimum_duty_cycle, TIMER1_MAX_ARR);
-			
-			if (tenkhzcounter % 10 == 0)
-			{ // 1khz PID loop				
-			}
-			prop_brake_active = 0;			
+			running = 1;
+			last_duty_cycle = min_startup_duty;
 		}
-		if (input < 47 )
+		duty_cycle = map(input, 47, 2047, minimum_duty_cycle, TIMER1_MAX_ARR);
+		
+		if (tenkhzcounter % 10 == 0)// 1khz PID loop	
 		{
-			if (play_tone_flag != 0)
+		}
+		prop_brake_active = 0;			
+	}
+	if (input < 47 )
+	{
+		if (play_tone_flag != 0)
+		{
+			if (play_tone_flag == 1)
 			{
-				if (play_tone_flag == 1)
-				{
-					playDefaultTone();
-				}
-				if (play_tone_flag == 2)
-				{
-					playChangedTone();
-				}
-				play_tone_flag = 0;
+				playDefaultTone();
 			}
+			if (play_tone_flag == 2)
+			{
+				playChangedTone();
+			}
+			play_tone_flag = 0;
+		}
 
-			if (!comp_pwm)
+		if (!comp_pwm)
+		{
+			duty_cycle = 0;
+			if (!running)
 			{
-				duty_cycle = 0;
-				if (!running)
+				polling_mode = 1;
+				zero_crosses = 0;
+				if (brake_on_stop)
 				{
-					polling_mode = 1;
-					zero_crosses = 0;
-					if (brake_on_stop)
-					{
-						fullBrake();
-					}
-					else
-					{
-						if (!prop_brake_active)
-						{
-							allOff();
-						}
-					}
+					fullBrake();
 				}
-			}
-			else
-			{
-				if (!running)
+				else
 				{
-					duty_cycle = 0;
-					polling_mode = 1;
-					zero_crosses = 0;
-					bad_count = 0;
-					if (brake_on_stop)
-					{
-#ifndef PWM_ENABLE_BRIDGE
-							duty_cycle = (TIMER1_MAX_ARR - 19) + drag_brake_strength * 2;
-							proportionalBrake();
-							prop_brake_active = 1;
-#else
-							// todo add proportional braking for pwm/enable style bridge.
-#endif
-					}
-					else
+					if (!prop_brake_active)
 					{
 						allOff();
-						duty_cycle = 0;
 					}
 				}
 			}
-		}
-		if (!prop_brake_active)
-		{
-			if (zero_crosses < 20)
-			{
-				if (duty_cycle < min_startup_duty)
-				{
-					duty_cycle = min_startup_duty;
-				}
-				if (duty_cycle > startup_max_duty_cycle)
-				{
-					duty_cycle = startup_max_duty_cycle;
-				}
-			}
-
-			if (duty_cycle > duty_cycle_maximum)
-			{
-				duty_cycle = duty_cycle_maximum;
-			}
-			if (use_current_limit)
-			{
-				if (duty_cycle > use_current_limit_adjust)
-				{
-					duty_cycle = use_current_limit_adjust;
-				}
-			}
-
-			
-			if (maximum_throttle_change_ramp)
-			{
-				//	max_duty_cycle_change = map(k_erpm, low_rpm_level, high_rpm_level, 1, 40);
-				if (average_interval > 500)
-				{
-					max_duty_cycle_change = 10;
-				}
-				else
-				{
-					max_duty_cycle_change = 30;
-				}
-				if ((duty_cycle - last_duty_cycle) > max_duty_cycle_change)
-				{
-					duty_cycle = last_duty_cycle + max_duty_cycle_change;
-					if (commutation_interval > 500)
-					{
-						fast_accel = 1;
-					}
-					else
-					{
-						fast_accel = 0;
-					}
-				}
-				else if ((last_duty_cycle - duty_cycle) > max_duty_cycle_change)
-				{
-					duty_cycle = last_duty_cycle - max_duty_cycle_change;
-					fast_accel = 0;
-				}
-				else
-				{
-					fast_accel = 0;
-				}
-			}
-		}
-		uint16_t adjusted_duty_cycle;
-		if ((armed && running) && input > 47)
-		{
-			if (VARIABLE_PWM)
-			{
-				tim1_arr = map(commutation_interval, 96, 200, TIMER1_MAX_ARR / 2, TIMER1_MAX_ARR);
-			}
-			adjusted_duty_cycle = ((duty_cycle * tim1_arr) / TIMER1_MAX_ARR) + 1;
 		}
 		else
 		{
-			if (prop_brake_active)
+			if (!running)
 			{
-				adjusted_duty_cycle = TIMER1_MAX_ARR - ((duty_cycle * tim1_arr) / TIMER1_MAX_ARR) + 1;
+				duty_cycle = 0;
+				polling_mode = 1;
+				zero_crosses = 0;
+				bad_count = 0;
+				if (brake_on_stop)
+				{
+#ifndef PWM_ENABLE_BRIDGE
+						duty_cycle = (TIMER1_MAX_ARR - 19) + drag_brake_strength * 2;
+						proportionalBrake();
+						prop_brake_active = 1;
+#else
+						// todo add proportional braking for pwm/enable style bridge.
+#endif
+				}
+				else
+				{
+					allOff();
+					duty_cycle = 0;
+				}
+			}
+		}
+	}
+
+	if (!prop_brake_active)
+	{
+		if (zero_crosses < 20)
+		{
+			if (duty_cycle < min_startup_duty)
+			{
+				duty_cycle = min_startup_duty;
+			}
+			if (duty_cycle > startup_max_duty_cycle)
+			{
+				duty_cycle = startup_max_duty_cycle;
+			}
+		}
+
+		if (duty_cycle > duty_cycle_maximum)
+		{
+			duty_cycle = duty_cycle_maximum;
+		}
+		if (use_current_limit)
+		{
+			if (duty_cycle > use_current_limit_adjust)
+			{
+				duty_cycle = use_current_limit_adjust;
+			}
+		}
+
+		
+		if (maximum_throttle_change_ramp)
+		{
+			//	max_duty_cycle_change = map(k_erpm, low_rpm_level, high_rpm_level, 1, 40);
+			if (average_interval > 500)
+			{
+				max_duty_cycle_change = 10;
 			}
 			else
 			{
-				adjusted_duty_cycle = DEAD_TIME * running;
+				max_duty_cycle_change = 30;
+			}
+			if ((duty_cycle - last_duty_cycle) > max_duty_cycle_change)
+			{
+				duty_cycle = last_duty_cycle + max_duty_cycle_change;
+				if (commutation_interval > 500)
+				{
+					fast_accel = 1;
+				}
+				else
+				{
+					fast_accel = 0;
+				}
+			}
+			else if ((last_duty_cycle - duty_cycle) > max_duty_cycle_change)
+			{
+				duty_cycle = last_duty_cycle - max_duty_cycle_change;
+				fast_accel = 0;
+			}
+			else
+			{
+				fast_accel = 0;
 			}
 		}
-		last_duty_cycle = duty_cycle;
-		TMR1->pr = tim1_arr;
-
-		TMR1->c1dt = adjusted_duty_cycle;
-		TMR1->c2dt = adjusted_duty_cycle;
-		TMR1->c3dt = adjusted_duty_cycle;
 	}
+	uint16_t adjusted_duty_cycle;
+	if ((armed && running) && input > 47)
+	{
+		if (VARIABLE_PWM)
+		{
+			tim1_arr = map(commutation_interval, 96, 200, TIMER1_MAX_ARR / 2, TIMER1_MAX_ARR);
+		}
+		adjusted_duty_cycle = ((duty_cycle * tim1_arr) / TIMER1_MAX_ARR) + 1;
+	}
+	else
+	{
+		if (prop_brake_active)
+		{
+			adjusted_duty_cycle = TIMER1_MAX_ARR - ((duty_cycle * tim1_arr) / TIMER1_MAX_ARR) + 1;
+		}
+		else
+		{
+			adjusted_duty_cycle = DEAD_TIME * running;
+		}
+	}
+	last_duty_cycle = duty_cycle;
+	TMR1->pr = tim1_arr;
+
+	TMR1->c1dt = adjusted_duty_cycle;
+	TMR1->c2dt = adjusted_duty_cycle;
+	TMR1->c3dt = adjusted_duty_cycle;
+	
 	average_interval = e_com_time / 3;
 	if (desync_check && zero_crosses > 10)
 	{
@@ -716,55 +754,7 @@ void tenKhzRoutine()
 	}
 #endif
 
-#if defined(FIXED_DUTY_MODE) || defined(FIXED_SPEED_MODE)
-#else
-	signaltimeout++;
-
-	if (signaltimeout > 2500 * (servoPwm + 1))
-	{ // quarter second timeout when armed half second for servo;
-		if (armed)
-		{
-			allOff();
-			armed = 0;
-			input = 0;
-			inputSet = 0;
-			zero_input_count = 0;
-
-			TMR1->c1dt = 0;
-			TMR1->c2dt = 0;
-			TMR1->c3dt = 0;
-
-			IC_TIMER_REGISTER->div = 0;
-			IC_TIMER_REGISTER->cval = 0;
-
-			for (int i = 0; i < 64; i++)
-			{
-				dma_buffer[i] = 0;
-			}
-			NVIC_SystemReset();
-		}
-
-		if (signaltimeout > 25000)
-		{ // 2.5 second
-			allOff();
-			armed = 0;
-			input = 0;
-			inputSet = 0;
-			zero_input_count = 0;
-
-			TMR1->c1dt = 0;
-			TMR1->c2dt = 0;
-			TMR1->c3dt = 0;
-			IC_TIMER_REGISTER->div = 0;
-			IC_TIMER_REGISTER->cval = 0;
-			for (int i = 0; i < 64; i++)
-			{
-				dma_buffer[i] = 0;
-			}
-			NVIC_SystemReset();
-		}
-	}
-#endif
+	checkSignalTimeout();
 }
 
 uint16_t bidirection_test_change_direction(uint16_t inputval){
