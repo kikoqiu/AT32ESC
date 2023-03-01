@@ -85,7 +85,7 @@ void loadEEpromSettings()
 	{
 		min_startup_duty = (eepromBuffer[25] / 2 + DEAD_TIME) * TIMER1_MAX_ARR / 2000;
 		minimum_duty_cycle = (eepromBuffer[25] / 4 + DEAD_TIME / 4) * TIMER1_MAX_ARR / 2000;
-		stall_protect_minimum_duty = minimum_duty_cycle + 10;
+		//stall_protect_minimum_duty = minimum_duty_cycle + 10;
 	}
 	else
 	{
@@ -157,14 +157,14 @@ void loadEEpromSettings()
 		if (eepromBuffer[39] == 0x01)
 		{
 #ifdef HAS_HALL_SENSORS
-			USE_HALL_SENSOR = 1;
+			//USE_HALL_SENSOR = 1;
 #else
-			USE_HALL_SENSOR = 0;
+			//USE_HALL_SENSOR = 0;
 #endif
 		}
 		else
 		{
-			USE_HALL_SENSOR = 0;
+			//USE_HALL_SENSOR = 0;
 		}
 		if (eepromBuffer[40] > 4 && eepromBuffer[40] < 26)
 		{ // sine mode changeover 5-25 percent throttle
