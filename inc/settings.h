@@ -77,8 +77,7 @@ void loadEEpromSettings()
 	}
 	else
 	{
-		tim1_arr = TIM1_AUTORELOAD;
-		TMR1->pr = tim1_arr;
+		TMR1->pr = TIM1_AUTORELOAD;
 	}
 
 	if (eepromBuffer[25] < 151 && eepromBuffer[25] > 49)

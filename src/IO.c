@@ -151,7 +151,7 @@ void detectInput(){
 
 		inputSet = 1;
 	}
-	UTILITY_TIMER->c1dt = smallestnumber;
+	//UTILITY_TIMER->c1dt = smallestnumber;
 }
 
 

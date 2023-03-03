@@ -111,7 +111,7 @@ void transfercomplete(){
 					receiveDshotDma();
 					return;
 			}else{
-					computeDshotDMA();//kikoqiu
+					computeDshotDMA();
 					make_dshot_package();
 					sendDshotDma();
 					return;

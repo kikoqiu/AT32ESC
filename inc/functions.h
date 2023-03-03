@@ -19,3 +19,7 @@ int getAbsDif(int number1, int number2);
 void delayMicros(uint32_t micros);
 void delayMillis(uint32_t millis);
 long map(long x, long in_min, long in_max, long out_min, long out_max);
+
+
+#define time16_after(a,b)   ((long)((b) - (a)) < 0)
+#define time16_before(a,b)   time16_after(b,a)

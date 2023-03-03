@@ -79,9 +79,8 @@ int getAbsDif(int number1, int number2){
 
 
 void delayMicros(uint32_t micros){
-UTILITY_TIMER->cval = 0;
-
-	while (UTILITY_TIMER->cval < micros){
+	uint16_t endtime=UTILITY_TIMER->cval+micros;
+	while (time16_before(UTILITY_TIMER->cval, endtime)){
 
 	}
 }

@@ -99,7 +99,6 @@ char reversing_dead_band = 1;
 uint16_t startup_max_duty_cycle = 300 + DEAD_TIME;
 uint16_t minimum_duty_cycle = DEAD_TIME;
 
-uint16_t tim1_arr = TIM1_AUTORELOAD;		   // current auto reset value
 uint16_t TIMER1_MAX_ARR = TIM1_AUTORELOAD;	   // maximum auto reset register value
 uint16_t duty_cycle_maximum = TIM1_AUTORELOAD; // restricted by temperature or low rpm throttle protect
 uint16_t low_rpm_level = 20;				   // thousand erpm used to set range for throttle resrictions
@@ -456,6 +455,16 @@ void checkForHighSignal()
 	}
 }*/
 
+#define PWN_DITHER
+#ifdef PWN_DITHER
+static unsigned long int next = 1; 
+int rand(void)
+{
+    next = next * 1103515245 + 12345;
+    return (unsigned int) (next >> 16) % 32768;
+}
+#endif
+
 void tenKhzRoutine()
 {
 	tenkhzcounter++;
@@ -690,14 +699,24 @@ void tenKhzRoutine()
 			}
 		}
 	}
+	uint16_t tim1_arr = TIMER1_MAX_ARR;									
 	uint16_t adjusted_duty_cycle;
 	if ((armed && running) && input > 47)
 	{
 		if (VARIABLE_PWM)
 		{
-			tim1_arr = map(commutation_interval, 96, 200, TIMER1_MAX_ARR / 2, TIMER1_MAX_ARR);
+			tim1_arr = map(commutation_interval, 96, 200, TIMER1_MAX_ARR / 2 , TIMER1_MAX_ARR);
 		}
+	#ifdef PWN_DITHER
+		float float_duty_cycle=(((float)duty_cycle * (float)tim1_arr) / (float)TIMER1_MAX_ARR) ;
+		adjusted_duty_cycle = float_duty_cycle;
+		float frac = float_duty_cycle - adjusted_duty_cycle;
+		if( (rand()%10) < frac*10){
+			adjusted_duty_cycle++;
+		}
+	#else
 		adjusted_duty_cycle = ((duty_cycle * tim1_arr) / TIMER1_MAX_ARR) + 1;
+	#endif	 
 	}
 	else
 	{
@@ -851,7 +870,7 @@ uint16_t bidirection_test_change_direction(uint16_t inputval){
 	}
 	return ret;
 }
-void initTimers(){
+void enableTimers(){
 	
 	tmr_channel_enable(TMR1, TMR_SELECT_CHANNEL_1, TRUE);
 	tmr_channel_enable(TMR1, TMR_SELECT_CHANNEL_2, TRUE);
@@ -905,14 +924,13 @@ int main(void)
 	__enable_irq();
 
 	initCorePeripherals();
-	initTimers();
+	enableTimers();
 
 #ifdef USE_ADC
 	ADC_Init();
 #endif
 
 	loadEEpromSettings();
-	tim1_arr = TIMER1_MAX_ARR;
 	startup_max_duty_cycle = startup_max_duty_cycle * TIMER1_MAX_ARR / 2000 + dead_time_override; // adjust for pwm frequency
 	throttle_max_at_low_rpm = throttle_max_at_low_rpm * TIMER1_MAX_ARR / 2000;					  // adjust to new pwm frequency
 	throttle_max_at_high_rpm = TIMER1_MAX_ARR;			  									  // adjust to new pwm frequency
