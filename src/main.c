@@ -310,8 +310,32 @@ void queueCommEvent(uint16_t wtime){
 	COM_TIMER->iden |= TMR_OVF_INT;
 }
 
+void zcfoundroutine(){   // only used in polling mode, blocking routine.
+	thiszctime = INTERVAL_TIMER->cval;
+	INTERVAL_TIMER->cval = 0;
+	commutation_interval = (thiszctime + (3*commutation_interval)) / 4;
+	uint16_t advance = 0;
+	advance = commutation_interval / advancedivisor;
+	uint16_t waitTime = commutation_interval /2  - advance;
+	while (INTERVAL_TIMER->cval < waitTime - advance){
+	}
+	commutate();
+	bemfcounter = 0;
+	bad_count = 0;
+
+	zero_crosses++;
+	if(zero_crosses > 30){
+			polling_mode = 0;
+			enableCompInterrupts();          // enable interrupt
+	}   
+
+}
+
 void zcfoundroutine_nonblock()
 {
+#if 1
+	zcfoundroutine();
+#else
 	thiszctime = INTERVAL_TIMER->cval;
 	INTERVAL_TIMER->cval = 0;
 	commutation_interval = (thiszctime + (3 * commutation_interval)) / 4;
@@ -319,7 +343,9 @@ void zcfoundroutine_nonblock()
 	advance = commutation_interval / advancedivisor;
 	uint16_t waitTime  = commutation_interval / 2 - advance;
 	queueCommEvent(waitTime);
+#endif
 }
+
 
 void interruptRoutine()
 {
@@ -455,7 +481,7 @@ void checkForHighSignal()
 	}
 }*/
 
-#define PWN_DITHER
+//#define PWN_DITHER
 #ifdef PWN_DITHER
 static unsigned long int next = 1; 
 int rand(void)
