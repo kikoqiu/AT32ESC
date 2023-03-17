@@ -91,14 +91,23 @@ void computeDshotDMA()
 		{
 			if (dshot_telemetry == 0)
 			{
-				if ((INPUT_PIN_PORT->idt & INPUT_PIN))
-				{ // if the pin is high for 100 checks between signal pulses its inverted
+				#if 0
+				 if((INPUT_PIN_PORT->idt & INPUT_PIN)){  // if the pin is high for 100 checks between signal pulses its inverted
+					 high_pin_count++;
+					 if(high_pin_count > 100){
+						 dshot_telemetry = 1;
+					 }
+				 }
+				 #else
+				 if(calcCRC == ~checkCRC+16){
 					high_pin_count++;
-					if (high_pin_count > 100)
-					{
-						dshot_telemetry = 1;
-					}
-				}
+					 if(high_pin_count > 4){
+						 dshot_telemetry = 1;
+					 }
+				 }else{
+					 high_pin_count=0;
+				 }
+				 #endif
 			}
 		}
 		if (dshot_telemetry)
