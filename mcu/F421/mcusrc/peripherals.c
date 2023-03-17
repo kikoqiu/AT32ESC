@@ -191,7 +191,7 @@ void TIM17_Init(void)
 {
 	crm_periph_clock_enable(CRM_TMR17_PERIPH_CLOCK, TRUE);
 	TMR17->pr = 0xFFFF;
-	TMR17->div = 59;
+	TMR17->div = CPU_FREQUENCY_MHZ-1;
 TMR17->ctrl1_bit.prben = TRUE;
 
 }
