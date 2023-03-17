@@ -30,7 +30,7 @@
 #ifdef AT32DEV_F421
 #define FIRMWARE_NAME           "AT32PB4     "
 #define FILE_NAME                "AT32DEV_F421"
-#define DEAD_TIME               80
+#define DEAD_TIME               60
 #define HARDWARE_GROUP_AT_A
 #define USE_SERIAL_TELEMETRY
 #endif
