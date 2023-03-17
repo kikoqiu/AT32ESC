@@ -433,8 +433,8 @@ void checkSignalTimeout(){
 			NVIC_SystemReset();
 		}
 
-		if (signaltimeout > 25000)
-		{ // 2.5 second
+#if !defined USE_DEBUG
+		if ( signaltimeout > 50000){     // 5 second
 			allOff();
 			armed = 0;
 			input = 0;
@@ -452,6 +452,7 @@ void checkSignalTimeout(){
 			}
 			NVIC_SystemReset();
 		}
+#endif
 	}
 #endif
 }

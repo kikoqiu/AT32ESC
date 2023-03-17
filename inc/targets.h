@@ -25,6 +25,7 @@
 
 #endif
 
+#define USE_DEBUG
 
 
 #ifdef AT32DEV_F421
