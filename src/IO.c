@@ -95,12 +95,10 @@ void detectInput(){
 	for ( int j = 1 ; j < 31; j++){
 		if(dma_buffer[j] - lastnumber > 0 ){
 		if((dma_buffer[j] - lastnumber) < smallestnumber){
-
 			smallestnumber = dma_buffer[j] - lastnumber;
-			++sigcount;
-	}
-
+		}
 		average_signal_pulse += (dma_buffer[j] - lastnumber);
+		++sigcount;
 	}
 		lastnumber = dma_buffer[j];
 	}

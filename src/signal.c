@@ -132,12 +132,10 @@ if(dshot_telemetry){
     if(out_put){
 //    	TIM17->CNT = 0;
   	   receiveDshotDma();             //holy smokes.. reverse the line and set up dma again
-   	   return;
     }else{
 			 make_dshot_package();          // this takes around 10us !!
 		   sendDshotDma();
 			 computeDshotDMA();             //this is slow too..
-    return;
     }
 }else{
 		if (dshot == 1){
