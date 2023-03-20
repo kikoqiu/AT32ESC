@@ -166,6 +166,8 @@ uint8_t bemf_timeout_happened = 0;
 uint8_t changeover_step = 5;
 uint8_t filter_level = 5;
 uint8_t running = 0;
+uint16_t stop_counter_for_alloff=0; //the counter for pwm off for 0 input
+
 const uint8_t advancedivisor = 4;
 uint8_t bad_count = 0;
 
@@ -586,6 +588,7 @@ void tenKhzRoutine()
 	
 	if (input >= 47  && armed)
 	{
+		stop_counter_for_alloff=0;
 		if (running == 0)
 		{
 			allOff();
@@ -658,7 +661,11 @@ void tenKhzRoutine()
 				}
 				else
 				{
-					allOff();
+					if(stop_counter_for_alloff>1000){
+						allOff();
+					}else{
+						++stop_counter_for_alloff;
+					}
 					duty_cycle = 0;
 				}
 			}
