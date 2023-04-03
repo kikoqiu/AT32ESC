@@ -770,7 +770,8 @@ void tenKhzRoutine()
 		if (VARIABLE_PWM)
 		{
 			//tim1_arr = map(commutation_interval, 96, 200, TIMER1_MAX_ARR/2, TIMER1_MAX_ARR);
-			tim1_arr = map(commutation_interval, 150, 750, TIMER1_MAX_ARR/3, TIMER1_MAX_ARR);
+			int target_arr=map(motor_kv, 2800, 4800, TIMER1_MAX_ARR/2 , TIMER1_MAX_ARR/3);
+			tim1_arr = map(commutation_interval, 150, 750, target_arr, TIMER1_MAX_ARR);
 		}
 	#ifdef PWN_DITHER
 		float float_duty_cycle=(((float)duty_cycle * (float)tim1_arr) / (float)TIMER1_MAX_ARR) ;
