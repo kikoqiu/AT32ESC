@@ -153,6 +153,11 @@ char polling_mode = 0;
 char prop_brake_active = 0;
 char fast_accel = 1;
 
+int this_com_interval_ratio=10000;
+#if defined(USE_DEBUG)
+int max_com_interval_ratio=10000;
+#endif
+
 char forward = 1;
 uint8_t stuckcounter = 0;
 char step = 1;
@@ -306,7 +311,7 @@ void PeriodElapsedCallback()
 }
 
 void queueCommEvent(uint16_t wtime){
-	COM_TIMER->cval = 0;
+	COM_TIMER->cval = INTERVAL_TIMER->cval;//already passed INTERVAL_TIMER->cval
 	COM_TIMER->pr = wtime;
 	COM_TIMER->ists = 0x00;
 	COM_TIMER->iden |= TMR_OVF_INT;
@@ -351,13 +356,14 @@ void zcfoundroutine_nonblock()
 
 void interruptRoutine()
 {
+
 	if (average_interval > 125)
 	{
 		if ((INTERVAL_TIMER->cval < 125) && (duty_cycle < 600) && (zero_crosses < 500))
 		{ // should be impossible, desync?exit anyway
 			return;
 		}
-		if ((INTERVAL_TIMER->cval < (commutation_interval >> 1)))
+		if ((INTERVAL_TIMER->cval < (commutation_interval >> 2)))//change to max 1/4 change
 		{
 			return;
 		}
@@ -369,7 +375,7 @@ void interruptRoutine()
 			return;
 		}
 	}
-	thiszctime = INTERVAL_TIMER->cval;
+
 
 	for (int i = 0; i < filter_level; i++)
 	{
@@ -383,14 +389,37 @@ void interruptRoutine()
 		}
 	}
 
-	maskPhaseInterrupts();
+	thiszctime = INTERVAL_TIMER->cval;
 	INTERVAL_TIMER->cval = 0;
+	
+	this_com_interval_ratio=(int)commutation_interval*10000/thiszctime;
+#if defined(USE_DEBUG)
+			if(this_com_interval_ratio>max_com_interval_ratio){
+				max_com_interval_ratio=this_com_interval_ratio;
+			}
+#endif
+			
+	
+	maskPhaseInterrupts();
 
-	commutation_interval = ((3 * commutation_interval) + thiszctime) >> 2;
+	commutation_interval = thiszctime;
+	//commutation_interval = (commutation_interval+thiszctime)>>1;
+	//commutation_interval = (( 3*commutation_interval) + thiszctime)>>2;			
+	int next_commutation_interval=commutation_interval;			
+	if(fast_accel){
+		int target_comm_ratio=this_com_interval_ratio;
+		if(target_comm_ratio>40000){
+			target_comm_ratio=40000;
+		}else if(target_comm_ratio<10000){
+			target_comm_ratio=10000;
+		} 
+		next_commutation_interval=next_commutation_interval*10000/target_comm_ratio;
+	}
+
 	uint16_t advance = 0;
-	advance = (commutation_interval >> 3) * advance_level; // 60 divde 8 7.5 degree increments
-	uint16_t waitTime = (commutation_interval >> 1) - advance;
-	queueCommEvent(waitTime >> fast_accel);
+	advance = (next_commutation_interval >> 3) * advance_level; // 60 divde 8 7.5 degree increments
+	uint16_t waitTime = (next_commutation_interval >> 1) - advance;
+	queueCommEvent(waitTime);
 }
 
 void startMotor()
@@ -704,23 +733,24 @@ void tenKhzRoutine()
 			//	max_duty_cycle_change = map(k_erpm, low_rpm_level, high_rpm_level, 1, 40);
 			if (average_interval > 500)
 			{
-				max_duty_cycle_change = 10;
+				max_duty_cycle_change = 13;//10
 			}
 			else
 			{
-				max_duty_cycle_change = 30;
+				max_duty_cycle_change = 40;//30
 			}
 			if ((duty_cycle - last_duty_cycle) > max_duty_cycle_change)
 			{
 				duty_cycle = last_duty_cycle + max_duty_cycle_change;
-				if (commutation_interval > 500)
+				fast_accel = 1;
+				/*if (commutation_interval > 500)
 				{
 					fast_accel = 1;
 				}
 				else
 				{
 					fast_accel = 0;
-				}
+				}*/
 			}
 			else if ((last_duty_cycle - duty_cycle) > max_duty_cycle_change)
 			{
@@ -739,7 +769,8 @@ void tenKhzRoutine()
 	{
 		if (VARIABLE_PWM)
 		{
-			tim1_arr = map(commutation_interval, 96, 200, TIMER1_MAX_ARR / 2 , TIMER1_MAX_ARR);
+			//tim1_arr = map(commutation_interval, 96, 200, TIMER1_MAX_ARR/2, TIMER1_MAX_ARR);
+			tim1_arr = map(commutation_interval, 150, 750, TIMER1_MAX_ARR/3, TIMER1_MAX_ARR);
 		}
 	#ifdef PWN_DITHER
 		float float_duty_cycle=(((float)duty_cycle * (float)tim1_arr) / (float)TIMER1_MAX_ARR) ;
